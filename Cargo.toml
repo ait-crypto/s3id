@@ -1,0 +1,30 @@
+[package]
+name = "s3id"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bls12_381 = { version = "0.8", features = ["experimental"] }
+group = { version = "0.13", features = ["rand"] }
+pairing = "0.23"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+sha2 = { version = "0.9", default-features = false, features = ["std"] }
+sha3 = { version = "0.10", default-features = false, features = ["std", "asm"] }
+signature = { version = "2.2", features = ["std"] }
+thiserror = "1"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "bls381"
+harness = false
+
+[[bench]]
+name = "atact"
+harness = false
+
+[profile.bench]
+lto = true
+opt-level = 3
