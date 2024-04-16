@@ -11,6 +11,8 @@ fn bench_atact(
     t: usize,
     tprime: usize,
 ) {
+    let mut c = c.benchmark_group(format!("(N, n, t, t') = {:?}", (num_issuers, n, t, tprime)));
+
     let mut rng = rand::thread_rng();
     let attributes: Vec<_> = (0..num_attributes)
         .map(|_| Scalar::random(&mut rng))
@@ -19,66 +21,52 @@ fn bench_atact(
 
     let (pp, issuers) = setup(num_issuers, n, t, tprime, &attributes);
 
-    c.bench_function(
-        &format!(
-            "token_request (N, n, t, t') = {:?}",
-            (num_issuers, n, t, tprime)
-        ),
-        |b| {
-            b.iter(|| {
-                black_box(token_request(a, &pp).expect("token request failed"));
-            })
-        },
-    );
+    c.sample_size(50);
+    if n > 50 {
+        c.sample_size(10);
+    }
+    c.bench_function("token_request", |b| {
+        b.iter(|| {
+            black_box(token_request(a, &pp).expect("token request failed"));
+        })
+    });
+    if n > 50 {
+        c.sample_size(50);
+    }
 
     let (blind_request, rand) = token_request(a, &pp).expect("token request failed");
-    c.bench_function(
-        &format!("tissue (N, n, t, t') = {:?}", (num_issuers, n, t, tprime)),
-        |b| {
-            b.iter(|| {
-                black_box(tissue(&blind_request, &issuers[0], &pp).expect("tissue failed"));
-            });
-        },
-    );
+    c.bench_function("tissue", |b| {
+        b.iter(|| {
+            black_box(tissue(&blind_request, &issuers[0], &pp).expect("tissue failed"));
+        });
+    });
 
     let blind_tokens = issuers
         .iter()
         .map(|issuer| tissue(&blind_request, issuer, &pp).expect("tissue failed"))
         .collect();
-    c.bench_function(
-        &format!(
-            "aggregate/unblind (N, n, t, t') = {:?}",
-            (num_issuers, n, t, tprime)
-        ),
-        |b| {
-            b.iter(|| {
-                black_box(aggregate_unblind(&blind_tokens, &rand, &pp));
-            });
-        },
-    );
+    c.bench_function("aggregate/unblind", |b| {
+        b.iter(|| {
+            black_box(aggregate_unblind(&blind_tokens, &rand, &pp));
+        });
+    });
 
     let token = aggregate_unblind(&blind_tokens, &rand, &pp);
-    c.bench_function(
-        &format!("proof (N, n, t, t') = {:?}", (num_issuers, n, t, tprime)),
-        |b| {
-            b.iter(|| {
-                black_box(prove(&token, &rand, &pp));
-            });
-        },
-    );
+    c.bench_function("proof", |b| {
+        b.iter(|| {
+            black_box(prove(&token, &rand, &pp));
+        });
+    });
 
     let token_proof = prove(&token, &rand, &pp);
-    c.bench_function(
-        &format!("verify (N, n, t, t') = {:?}", (num_issuers, n, t, tprime)),
-        |b| {
-            b.iter(|| {
-                #[allow(unused_must_use)]
-                {
-                    black_box(verify(&token, &token_proof, &blind_request, &pp));
-                }
-            });
-        },
-    );
+    c.bench_function("verify", |b| {
+        b.iter(|| {
+            #[allow(unused_must_use)]
+            {
+                black_box(verify(&token, &token_proof, &blind_request, &pp));
+            }
+        });
+    });
 }
 
 const NUM_ISSUERS: [usize; 3] = [4, 16, 64];
