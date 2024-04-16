@@ -37,7 +37,7 @@ pub fn get_uhat() -> &'static G2Projective {
 pub enum Error {
     #[error("Invalid opening for commitment.")]
     InvalidOpening,
-    #[error("Invalid proof for comitment.")]
+    #[error("Invalid proof for commitment.")]
     InvalidProof,
 }
 
@@ -136,9 +136,12 @@ impl Commitment {
     }
 
     pub fn verify(&self, message: &Scalar, opening: &Opening) -> Result<(), Error> {
-        match get_g() * opening.r + get_u() * message == self.cm_1 {
-            true => Ok(()),
-            false => Err(Error::InvalidOpening),
+        match (
+            get_g() * opening.r + get_u() * message == self.cm_1,
+            get_ghat() * opening.r + get_uhat() * message == self.cm_2,
+        ) {
+            (true, true) => Ok(()),
+            _ => Err(Error::InvalidOpening),
         }
     }
 
