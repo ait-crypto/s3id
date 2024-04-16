@@ -93,23 +93,27 @@ pub fn token_request(a: Scalar, pp: &PublicParameters) -> Result<(BlindRequest, 
     let lagrange_values = &pp.lagrange_values;
     let pk_r = &pp.pk * r;
 
+    let mut base_com = coms
+        .iter()
+        .enumerate()
+        .map(|(j, comj)| comj * lagrange_values[j])
+        .sum();
+    let mut base_pk = rks
+        .iter()
+        .enumerate()
+        .map(|(j, rj)| rj * lagrange_values[j])
+        .sum();
+
     for k in (pp.tprime - 1)..pp.n {
         // SAFETY: this is always non-0
         let lk_1 = lagrange_values[k].invert().unwrap();
 
-        let base_com = coms
-            .iter()
-            .enumerate()
-            .map(|(j, comj)| comj * lagrange_values[j])
-            .sum();
-        let base_pk = rks
-            .iter()
-            .enumerate()
-            .map(|(j, rj)| rj * lagrange_values[j])
-            .sum();
-
         coms.push((&cm - &base_com) * lk_1);
         rks.push((&pk_r - &base_pk) * lk_1);
+
+        // FIXME: according to the protocol this should not be needed!
+        base_com = base_com + &(&coms[k] * lagrange_values[k]);
+        base_pk = base_pk + &(&rks[k] * lagrange_values[k]);
     }
 
     // Step 10
