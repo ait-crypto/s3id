@@ -20,7 +20,7 @@ pub struct PublicParameters {
     t: usize,
     tprime: usize,
     attributes: Vec<Scalar>,
-    lagrange: Lagrange,
+    lagrange_values: Vec<Scalar>,
 }
 
 pub fn setup(
@@ -35,6 +35,7 @@ pub fn setup(
 
     let issuer_sks = SecretKey::new_with_shares(num_issuers);
     let pk = PublicKey::from_secret_key_shares(&issuer_sks);
+    let lagrange = Lagrange::new_with_base_points(n);
 
     let pp = PublicParameters {
         pk,
@@ -42,7 +43,7 @@ pub fn setup(
         t,
         tprime,
         attributes: attributes.into(),
-        lagrange: Lagrange::new_with_base_points(n),
+        lagrange_values: (0..n).map(|j| lagrange.eval_0(j)).collect(),
     };
 
     (pp, issuer_sks.into_iter().map(|sk| Issuer { sk }).collect())
@@ -53,7 +54,7 @@ pub struct BlindRequest {
     pi: Proof,
     cm_ks: Vec<Commitment>,
     bold_cm_k: Commitment,
-    attribute_index: usize, // i^*
+    attribute_index: usize,
 }
 
 pub struct Rand {
@@ -89,23 +90,22 @@ pub fn token_request(a: Scalar, pp: &PublicParameters) -> Result<(BlindRequest, 
     }
 
     // Step 9
-    let lagrange = &pp.lagrange;
-    let langrage_values: Vec<_> = (0..pp.n).map(|j| lagrange.eval_0(j)).collect();
+    let lagrange_values = &pp.lagrange_values;
     let pk_r = &pp.pk * r;
 
     for k in (pp.tprime - 1)..pp.n {
         // SAFETY: this is always non-0
-        let lk_1 = langrage_values[k].invert().unwrap();
+        let lk_1 = lagrange_values[k].invert().unwrap();
 
         let base_com = coms
             .iter()
             .enumerate()
-            .map(|(j, comj)| comj * langrage_values[j])
+            .map(|(j, comj)| comj * lagrange_values[j])
             .sum();
         let base_pk = rks
             .iter()
             .enumerate()
-            .map(|(j, rj)| rj * langrage_values[j])
+            .map(|(j, rj)| rj * lagrange_values[j])
             .sum();
 
         coms.push((&cm - &base_com) * lk_1);
@@ -148,12 +148,12 @@ pub fn tissue(
         return Err(AtACTError::InvalidCommitmentProof(err));
     }
 
-    let lagrange = &pp.lagrange;
+    let lagrange = &pp.lagrange_values;
     let check_cm: Commitment = blind_request
         .cm_ks
         .iter()
         .enumerate()
-        .map(|(index, cm_k)| cm_k * lagrange.eval_0(index))
+        .map(|(index, cm_k)| cm_k * lagrange[index])
         .sum();
     if check_cm != blind_request.cm {
         return Err(AtACTError::InvalidCommitment);
@@ -210,7 +210,7 @@ pub fn aggregate_unblind(
     }
     debug_assert_eq!(rand.r_ks.len(), pp.n);
 
-    let lagrange = &pp.lagrange;
+    let lagrange = &pp.lagrange_values;
     let sks: Vec<_> = (0..pp.n)
         .map(|k| {
             let tmp = blind_tokens.iter().map(|token| &token[k].sigma).take(pp.t);
@@ -220,7 +220,7 @@ pub fn aggregate_unblind(
     let s = sks
         .iter()
         .enumerate()
-        .map(|(k, signature)| signature * lagrange.eval_0(k))
+        .map(|(k, signature)| signature * lagrange[k])
         .sum();
 
     Token { s, sks }
@@ -273,7 +273,7 @@ pub fn verify(
     pp: &PublicParameters,
 ) -> Result<(), AtACTError> {
     let c = token.hash_prime(pp);
-    let lagrange = &pp.lagrange;
+    let lagrange = &pp.lagrange_values;
     let pk_prime = &token_proof.pk_prime;
     let mut errs = vec![];
 
@@ -293,7 +293,7 @@ pub fn verify(
     }
 
     let sk_prod: Signature = (0..pp.tprime)
-        .map(|k| token_proof.ss[k].clone() * lagrange.eval_0(k))
+        .map(|k| token_proof.ss[k].clone() * lagrange[k])
         .sum();
     if pairing(token.s.sigma_1, token_proof.pk_prime.pk_2) != pairing(sk_prod.sigma_1, pp.pk.pk_2) {
         errs.push(AtACTError::InvalidToken);
@@ -304,7 +304,7 @@ pub fn verify(
 
     let cm_base: Commitment = c
         .iter()
-        .map(|k| &blind_request.cm_ks[*k] * lagrange.eval_0(*k))
+        .map(|k| &blind_request.cm_ks[*k] * lagrange[*k])
         .sum();
 
     for k in 0..pp.n {
@@ -326,7 +326,7 @@ pub fn verify(
             }
         } else {
             // 29.d
-            if &blind_request.cm_ks[k] * lagrange.eval_0(k) + &cm_base != blind_request.cm {
+            if &blind_request.cm_ks[k] * lagrange[k] + &cm_base != blind_request.cm {
                 errs.push(AtACTError::InvalidCommitment);
             }
         }
