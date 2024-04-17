@@ -21,23 +21,28 @@ fn bench_atact(
 
     let (pp, issuers) = setup(num_issuers, n, t, tprime, &attributes);
 
-    c.sample_size(50);
     if n > 50 {
-        c.sample_size(10);
+        c.sample_size(50);
     }
     c.bench_function("token_request", |b| {
         b.iter(|| {
-            black_box(token_request(a, &pp).expect("token request failed"));
+            #[allow(unused_must_use)]
+            {
+                black_box(token_request(a, &pp));
+            }
         })
     });
     if n > 50 {
-        c.sample_size(50);
+        c.sample_size(100);
     }
 
     let (blind_request, rand) = token_request(a, &pp).expect("token request failed");
     c.bench_function("tissue", |b| {
         b.iter(|| {
-            black_box(tissue(&blind_request, &issuers[0], &pp).expect("tissue failed"));
+            #[allow(unused_must_use)]
+            {
+                black_box(tissue(&blind_request, &issuers[0], &pp));
+            }
         });
     });
 

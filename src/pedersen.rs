@@ -110,10 +110,20 @@ where
     Scalar::from_bytes_wide(&digest.as_slice().try_into().unwrap())
 }
 
+fn hash_context() -> Sha512 {
+    static INSTANCE: OnceLock<Sha512> = OnceLock::new();
+    INSTANCE
+        .get_or_init(|| {
+            let mut hasher = Sha512::new();
+            hasher.update(b"hash-pedersen-proof");
+            hash_base(&mut hasher);
+            hasher
+        })
+        .clone()
+}
+
 fn hash_pedersen_proof(commitment: &Commitment, t_1: &G1Projective, t_2: &G2Projective) -> Scalar {
-    let mut hasher = Sha512::new();
-    hasher.update(b"hash-pedersen-proof");
-    hash_base(&mut hasher);
+    let mut hasher = hash_context();
     hash_commitment(&mut hasher, commitment);
     hash_g1(&mut hasher, t_1);
     hash_g2(&mut hasher, t_2);
@@ -198,9 +208,7 @@ impl Commitment {
         let t3_1 = base_1 * r2_2;
         let t3_2 = base_2 * r2_2;
 
-        let mut hasher = Sha512::new();
-        hasher.update(b"hash-pedersen-pi-2-pk");
-        hash_base(&mut hasher);
+        let mut hasher = hash_context();
         hash_g1(&mut hasher, base_1);
         hash_g2(&mut hasher, base_2);
         hash_commitment(&mut hasher, self);
@@ -247,9 +255,7 @@ impl Commitment {
         pk_2: &G2Projective,
         proof: &Proof2PK,
     ) -> Result<(), Error> {
-        let mut hasher = Sha512::new();
-        hasher.update(b"hash-pedersen-pi-2-pk");
-        hash_base(&mut hasher);
+        let mut hasher = hash_context();
         hash_g1(&mut hasher, base_1);
         hash_g2(&mut hasher, base_2);
         hash_commitment(&mut hasher, self);
