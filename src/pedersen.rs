@@ -48,7 +48,7 @@ pub struct Commitment {
 }
 
 pub struct Opening {
-    r: Scalar,
+    pub(crate) r: Scalar,
 }
 
 pub struct Proof {

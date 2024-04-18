@@ -62,17 +62,15 @@ pub fn register(a: &Scalar, pp: &PublicParameters) -> Result<(StRG, Commitment),
         .iter()
         .position(|attribute| *a == *attribute)
         .ok_or(AtACTError::InvalidAttribute)?;
-    let mut rng = rand::thread_rng();
 
     // Step 7
-    let r = Scalar::random(&mut rng);
-    let (cm, _) = Commitment::commit_with_randomness(a, &r);
+    let (cm, opening) = Commitment::commit(a);
 
     Ok((
         StRG {
             a: *a,
             attribute_index,
-            r,
+            r: opening.r,
         },
         cm,
     ))
@@ -104,10 +102,9 @@ pub fn token_request(
     let mut coms = vec![];
     for _ in 0..(pp.tprime - 1) {
         let ak = Scalar::random(&mut rng);
-        let rk = Scalar::random(&mut rng);
-        let (cm_k, _) = Commitment::commit_with_randomness(&ak, &rk);
+        let (cm_k, o_k) = Commitment::commit(&ak);
         coms.push(cm_k);
-        rks.push(&pp.pk * rk);
+        rks.push(&pp.pk * o_k.r);
     }
 
     // Step 9
@@ -139,8 +136,7 @@ pub fn token_request(
 
     // Step 10
     let bold_k = Scalar::random(&mut rng);
-    let bold_rk = Scalar::random(&mut rng);
-    let (bold_cm_k, _) = Commitment::commit_with_randomness(&bold_k, &bold_rk);
+    let (bold_cm_k, bold_cm_opening) = Commitment::commit(&bold_k);
 
     Ok((
         BlindRequest {
@@ -153,7 +149,7 @@ pub fn token_request(
             strg: strg.clone(),
             r_ks: rks,
             bold_k,
-            bold_rk,
+            bold_rk: bold_cm_opening.r,
         },
     ))
 }
