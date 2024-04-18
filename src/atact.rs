@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::{
     bls381_helpers::{pairing, SerdeWrapper},
     lagrange::Lagrange,
-    pedersen::{self, Commitment, Proof, Proof2PK},
+    pedersen::{self, Commitment, Proof2PK},
     tsw::{PublicKey, SecretKey, Signature},
 };
 
@@ -49,34 +49,55 @@ pub fn setup(
     (pp, issuer_sks.into_iter().map(|sk| Issuer { sk }).collect())
 }
 
+#[derive(Clone)]
+pub struct StRG {
+    a: Scalar,
+    attribute_index: usize,
+    r: Scalar,
+}
+
+pub fn register(a: &Scalar, pp: &PublicParameters) -> Result<(StRG, Commitment), AtACTError> {
+    let attribute_index = pp
+        .attributes
+        .iter()
+        .position(|attribute| *a == *attribute)
+        .ok_or(AtACTError::InvalidAttribute)?;
+    let mut rng = rand::thread_rng();
+
+    // Step 7
+    let r = Scalar::random(&mut rng);
+    let (cm, _) = Commitment::commit_with_randomness(a, &r);
+
+    Ok((
+        StRG {
+            a: *a,
+            attribute_index,
+            r,
+        },
+        cm,
+    ))
+}
+
 pub struct BlindRequest {
     cm: Commitment,
-    pi: Proof,
     cm_ks: Vec<Commitment>,
     bold_cm_k: Commitment,
     attribute_index: usize,
 }
 
 pub struct Rand {
-    a: Scalar,
-    r: Scalar,
+    strg: StRG,
     r_ks: Vec<PublicKey>,
     bold_k: Scalar,
     bold_rk: Scalar,
 }
 
-pub fn token_request(a: Scalar, pp: &PublicParameters) -> Result<(BlindRequest, Rand), AtACTError> {
-    let attribute_index = pp
-        .attributes
-        .iter()
-        .position(|attribute| a == *attribute)
-        .ok_or(AtACTError::InvalidAttribute)?;
+pub fn token_request(
+    strg: &StRG,
+    commitment: &Commitment,
+    pp: &PublicParameters,
+) -> Result<(BlindRequest, Rand), AtACTError> {
     let mut rng = rand::thread_rng();
-
-    // Step 7
-    let r = Scalar::random(&mut rng);
-    let (cm, o) = Commitment::commit_with_randomness(&a, &r);
-    let pi = cm.proof(&a, &o);
 
     // Step 8
     let mut rks = vec![];
@@ -91,7 +112,7 @@ pub fn token_request(a: Scalar, pp: &PublicParameters) -> Result<(BlindRequest, 
 
     // Step 9
     let lagrange_values = &pp.lagrange_values;
-    let pk_r = &pp.pk * r;
+    let pk_r = &pp.pk * strg.r;
 
     let mut base_com = coms
         .iter()
@@ -108,7 +129,7 @@ pub fn token_request(a: Scalar, pp: &PublicParameters) -> Result<(BlindRequest, 
         // SAFETY: this is always non-0
         let lk_1 = lagrange_values[k].invert().unwrap();
 
-        coms.push((&cm - &base_com) * lk_1);
+        coms.push((commitment - &base_com) * lk_1);
         rks.push((&pk_r - &base_pk) * lk_1);
 
         // FIXME: according to the protocol this should not be needed!
@@ -123,15 +144,13 @@ pub fn token_request(a: Scalar, pp: &PublicParameters) -> Result<(BlindRequest, 
 
     Ok((
         BlindRequest {
-            cm,
-            pi,
+            cm: commitment.clone(),
             cm_ks: coms,
-            attribute_index,
+            attribute_index: strg.attribute_index,
             bold_cm_k,
         },
         Rand {
-            a,
-            r,
+            strg: strg.clone(),
             r_ks: rks,
             bold_k,
             bold_rk,
@@ -148,10 +167,6 @@ pub fn tissue(
     prv_j: &Issuer,
     pp: &PublicParameters,
 ) -> Result<Vec<BlindToken>, AtACTError> {
-    if let Err(err) = blind_request.cm.verify_proof(&blind_request.pi) {
-        return Err(AtACTError::InvalidCommitmentProof(err));
-    }
-
     let lagrange = &pp.lagrange_values;
     let check_cm: Commitment = blind_request
         .cm_ks
@@ -249,11 +264,11 @@ pub fn prove(token: &Token, rand: &Rand, pp: &PublicParameters) -> TokenProof {
 
     let rs = c.iter().map(|k| &rand.r_ks[*k] * rand.bold_k).collect();
 
-    let (cm, o) = Commitment::commit_with_randomness(&rand.a, &rand.r);
+    let (cm, o) = Commitment::commit_with_randomness(&rand.strg.a, &rand.strg.r);
     let (bold_cm, bold_o) = Commitment::commit_with_randomness(&rand.bold_k, &rand.bold_rk);
 
     let pi_zk = cm.proof_2_pk(
-        &rand.a,
+        &rand.strg.a,
         &o,
         &bold_cm,
         &rand.bold_k,
@@ -381,7 +396,9 @@ mod test {
         let (pp, issuers) = setup(NUM_ISSUERS, N, T, TPRIME, &attributes);
 
         for a in attributes {
-            let (blind_request, rand) = token_request(a, &pp).expect("token request failed");
+            let (strg, cm) = register(&a, &pp).expect("register failed");
+            let (blind_request, rand) =
+                token_request(&strg, &cm, &pp).expect("token request failed");
             let mut blind_tokens = vec![];
             for issuer in &issuers {
                 let blind_token = tissue(&blind_request, issuer, &pp).expect("tissue failed");

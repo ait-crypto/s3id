@@ -21,6 +21,16 @@ fn bench_atact(
 
     let (pp, issuers) = setup(num_issuers, n, t, tprime, &attributes);
 
+    c.bench_function("register", |b| {
+        b.iter(|| {
+            #[allow(unused_must_use)]
+            {
+                black_box(register(&a, &pp));
+            }
+        })
+    });
+
+    let (strg, cm) = register(&a, &pp).expect("register failed");
     if n > 50 {
         c.sample_size(50);
     }
@@ -28,7 +38,7 @@ fn bench_atact(
         b.iter(|| {
             #[allow(unused_must_use)]
             {
-                black_box(token_request(a, &pp));
+                black_box(token_request(&strg, &cm, &pp));
             }
         })
     });
@@ -36,7 +46,7 @@ fn bench_atact(
         c.sample_size(100);
     }
 
-    let (blind_request, rand) = token_request(a, &pp).expect("token request failed");
+    let (blind_request, rand) = token_request(&strg, &cm, &pp).expect("token request failed");
     c.bench_function("tissue", |b| {
         b.iter(|| {
             #[allow(unused_must_use)]
