@@ -308,7 +308,7 @@ pub fn verify(
     }
 
     let sk_prod: Signature = (0..pp.tprime)
-        .map(|k| token_proof.ss[k].clone() * lagrange[k])
+        .map(|k| &token_proof.ss[k] * lagrange[k])
         .sum();
     if pairing(token.s.sigma_1, token_proof.pk_prime.pk_2) != pairing(sk_prod.sigma_1, pp.pk.pk_2) {
         errs.push(AtACTError::InvalidToken);
