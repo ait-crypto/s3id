@@ -337,12 +337,12 @@ pub fn verify(
                 )
                 .is_err()
             {
-                errs.push(AtACTError::InvalidSignature);
+                errs.push(AtACTError::InvalidSignature(k));
             }
         } else {
             // 29.d
             if &blind_request.cm_ks[k] * lagrange[k] + &cm_base != blind_request.cm {
-                errs.push(AtACTError::InvalidCommitment);
+                errs.push(AtACTError::InvalidCommitmentProof(k));
             }
         }
     }
@@ -350,7 +350,7 @@ pub fn verify(
     if errs.is_empty() {
         Ok(())
     } else {
-        Err(errs[0].clone())
+        Err(AtACTError::InvalidProof(errs))
     }
 }
 
@@ -362,14 +362,16 @@ pub enum AtACTError {
     InvalidChallenge,
     #[error("Invalid attribute.")]
     InvalidAttribute,
-    #[error("Invalid proof for commitment.")]
-    InvalidCommitmentProof(#[from] pedersen::Error),
+    #[error("Invalid commitment in proof.")]
+    InvalidCommitmentProof(usize),
     #[error("Invalid signature.")]
-    InvalidSignature,
+    InvalidSignature(usize),
     #[error("Invalid token.")]
     InvalidToken,
     #[error("Invalid ZK proof.")]
     InvalidZKProof,
+    #[error("Invalid token proof: {0:?}")]
+    InvalidProof(Vec<AtACTError>),
 }
 
 #[cfg(test)]
