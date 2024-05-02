@@ -48,7 +48,25 @@ pub struct Commitment {
 }
 
 pub struct Opening {
-    pub(crate) r: Scalar,
+    r: Scalar,
+}
+
+impl From<&Scalar> for Opening {
+    fn from(value: &Scalar) -> Self {
+        Self { r: *value }
+    }
+}
+
+impl From<Scalar> for Opening {
+    fn from(r: Scalar) -> Self {
+        Self { r }
+    }
+}
+
+impl AsRef<Scalar> for Opening {
+    fn as_ref(&self) -> &Scalar {
+        &self.r
+    }
 }
 
 pub struct Proof {

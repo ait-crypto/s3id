@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::{
     bls381_helpers::{pairing, SerdeWrapper},
     lagrange::Lagrange,
-    pedersen::{self, Commitment, Proof2PK},
+    pedersen::{Commitment, Proof2PK},
     tsw::{PublicKey, SecretKey, Signature},
 };
 
@@ -29,24 +29,26 @@ pub fn setup(
     t: usize,
     tprime: usize,
     attributes: &[Scalar],
-) -> (PublicParameters, Vec<Issuer>) {
-    debug_assert!(tprime <= n);
-    debug_assert!(t <= num_issuers);
+) -> Result<(PublicParameters, Vec<Issuer>), AtACTError> {
+    if tprime < 2 || tprime >= n || t < 2 || t >= num_issuers {
+        return Err(AtACTError::InvalidParameters);
+    }
 
-    let issuer_sks = SecretKey::new_with_shares(num_issuers);
-    let pk = PublicKey::from_secret_key_shares(&issuer_sks);
+    let sk = SecretKey::new();
     let lagrange = Lagrange::new_with_base_points(n);
 
+    let issuer_sks = sk.into_shares(num_issuers, t);
+
     let pp = PublicParameters {
-        pk,
+        pk: sk.to_public_key(),
         n,
         t,
         tprime,
         attributes: attributes.into(),
-        lagrange_values: (0..n).map(|j| lagrange.eval_0(j)).collect(),
+        lagrange_values: (0..n).map(|j| lagrange.eval_j_0(j)).collect(),
     };
 
-    (pp, issuer_sks.into_iter().map(|sk| Issuer { sk }).collect())
+    Ok((pp, issuer_sks.into_iter().map(|sk| Issuer { sk }).collect()))
 }
 
 #[derive(Clone)]
@@ -70,7 +72,7 @@ pub fn register(a: &Scalar, pp: &PublicParameters) -> Result<(StRG, Commitment),
         StRG {
             a: *a,
             attribute_index,
-            r: opening.r,
+            r: *opening.as_ref(),
         },
         cm,
     ))
@@ -104,7 +106,7 @@ pub fn token_request(
         let ak = Scalar::random(&mut rng);
         let (cm_k, o_k) = Commitment::commit(&ak);
         coms.push(cm_k);
-        rks.push(&pp.pk * o_k.r);
+        rks.push(&pp.pk * *o_k.as_ref());
     }
 
     // Step 9
@@ -149,7 +151,7 @@ pub fn token_request(
             strg: strg.clone(),
             r_ks: rks,
             bold_k,
-            bold_rk: bold_cm_opening.r,
+            bold_rk: *bold_cm_opening.as_ref(),
         },
     ))
 }
@@ -356,6 +358,8 @@ pub fn verify(
 
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum AtACTError {
+    #[error("Invalid parameters.")]
+    InvalidParameters,
     #[error("Commitment check failed.")]
     InvalidCommitment,
     #[error("Challenges do not match.")]
@@ -391,7 +395,7 @@ mod test {
             .map(|_| Scalar::random(&mut rng))
             .collect();
 
-        let (pp, issuers) = setup(NUM_ISSUERS, N, T, TPRIME, &attributes);
+        let (pp, issuers) = setup(NUM_ISSUERS, N, T, TPRIME, &attributes).expect("setup failed");
 
         for a in attributes {
             let (strg, cm) = register(&a, &pp).expect("register failed");

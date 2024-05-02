@@ -19,7 +19,7 @@ fn bench_atact(
         .collect();
     let a = attributes[0];
 
-    let (pp, issuers) = setup(num_issuers, n, t, tprime, &attributes);
+    let (pp, issuers) = setup(num_issuers, n, t, tprime, &attributes).expect("setup failed");
 
     c.bench_function("register", |b| {
         b.iter(|| {

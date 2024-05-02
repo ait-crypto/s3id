@@ -6,12 +6,13 @@ use std::{
 use bls12_381::{Bls12, G1Projective, G2Projective, Scalar};
 use group::ff::Field;
 use pairing::Engine;
-use rand::RngCore;
+use rand::{thread_rng, RngCore};
 use serde::{Deserialize, Serialize};
 use signature::{Signer, Verifier};
 
 use crate::{
     bls381_helpers::{self, hash_1, hash_2, hash_to_scalar, hash_usize_1, hash_usize_2, pairing},
+    lagrange::{Groupish, Lagrange},
     pedersen::{get_g, get_ghat, get_u, get_uhat, Commitment},
 };
 
@@ -24,11 +25,31 @@ pub struct SecretKey {
 #[allow(clippy::new_without_default)]
 impl SecretKey {
     pub fn new() -> Self {
-        Self::new_from_rng(rand::thread_rng())
+        Self::new_from_rng(thread_rng())
     }
 
-    pub fn new_with_shares(num_shares: usize) -> Vec<SecretKey> {
-        (0..num_shares).map(|_| SecretKey::new()).collect()
+    pub fn into_shares(&self, num_shares: usize, t: usize) -> Vec<SecretKey> {
+        let mut rng = thread_rng();
+        let mut sks: Vec<_> = (0..t - 1).map(|_| Scalar::random(&mut rng)).collect();
+
+        let mut base_points: Vec<_> = (1..=t - 1).map(|i| Scalar::from(i as u64)).collect();
+        base_points.push(Scalar::from(t as u64));
+
+        for _ in (t - 1)..num_shares {
+            let lagrange = Lagrange::new(&base_points);
+
+            let base = self.sk
+                - sks
+                    .iter()
+                    .take(t - 1)
+                    .enumerate()
+                    .map(|(j, sk)| sk * lagrange.eval_j_0(j))
+                    .sum::<Scalar>();
+
+            sks.push(base * lagrange.eval_j_0(t - 1).invert().unwrap());
+            base_points[t - 1] += Scalar::ONE;
+        }
+        sks.into_iter().map(|sk| SecretKey { sk }).collect()
     }
 
     pub fn new_from_rng(rng: impl RngCore) -> Self {
@@ -64,9 +85,15 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
-    pub fn from_secret_key_shares(shares: &[SecretKey]) -> PublicKey {
+    pub fn from_secret_key_shares<'a, I>(shares: I, lagrange: &Lagrange) -> PublicKey
+    where
+        I: Iterator<Item = &'a SecretKey>,
+    {
         SecretKey {
-            sk: shares.iter().map(|sk| sk.sk).sum(),
+            sk: shares
+                .enumerate()
+                .map(|(j, sk)| sk.sk * lagrange.eval_j_0(j))
+                .sum(),
         }
         .to_public_key()
     }
@@ -103,15 +130,12 @@ pub struct Signature {
 }
 
 impl Signature {
-    pub fn from_shares(signatures: &[Signature]) -> Signature {
-        let (sigma_1, sigma_2) = signatures
+    pub fn from_shares(signatures: &[Signature], lagrange: &Lagrange) -> Signature {
+        signatures
             .iter()
-            .map(|sig| (sig.sigma_1, sig.sigma_2))
-            .fold(
-                (G1Projective::identity(), G2Projective::identity()),
-                |(acc_1, acc_2), (sigma_1, sigma_2)| (acc_1 + sigma_1, acc_2 + sigma_2),
-            );
-        Signature { sigma_1, sigma_2 }
+            .enumerate()
+            .map(|(j, sig)| sig * lagrange.eval_j_0(j))
+            .sum()
     }
 }
 
@@ -236,6 +260,8 @@ impl Sum<PublicKey> for PublicKey {
     }
 }
 
+impl Groupish<Scalar> for PublicKey {}
+
 // this is abuse of notation
 impl Sub<&PublicKey> for Signature {
     type Output = Signature;
@@ -314,6 +340,8 @@ impl Sum for Signature {
     }
 }
 
+impl Groupish<Scalar> for Signature {}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -330,13 +358,37 @@ mod test {
 
     #[test]
     fn tsw() {
-        let sks = SecretKey::new_with_shares(10);
-        let pk = PublicKey::from_secret_key_shares(&sks);
-        assert!(pk.is_valid());
+        let n = 10;
+        let t = n / 2 + 1;
 
+        let sk = SecretKey::new();
+        let sks = sk.into_shares(n, t);
         let sigs: Vec<_> = sks.iter().map(|sk| sk.sign(b"test")).collect();
-        let sig = Signature::from_shares(sigs.as_ref());
 
+        let lagrange = Lagrange::new(
+            (1..=t)
+                .map(|i| Scalar::from(i as u64))
+                .collect::<Vec<_>>()
+                .as_ref(),
+        );
+        let pk = PublicKey::from_secret_key_shares(sks.iter().take(t), &lagrange);
+        assert!(pk.is_valid());
+        assert_eq!(pk, sk.to_public_key());
+
+        let sig = Signature::from_shares(&sigs[..t], &lagrange);
+        assert!(pk.verify(b"test", &sig).is_ok());
+
+        let lagrange = Lagrange::new(
+            (2..=t + 1)
+                .map(|i| Scalar::from(i as u64))
+                .collect::<Vec<_>>()
+                .as_ref(),
+        );
+        let other_pk = PublicKey::from_secret_key_shares(sks.iter().skip(1).take(t), &lagrange);
+        assert!(other_pk.is_valid());
+        assert_eq!(other_pk, pk);
+
+        let sig = Signature::from_shares(&sigs[1..t + 1], &lagrange);
         assert!(pk.verify(b"test", &sig).is_ok());
     }
 
