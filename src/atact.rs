@@ -20,8 +20,6 @@ pub struct PublicParameters {
     t: usize,
     tprime: usize,
     attributes: Vec<Scalar>,
-    #[deprecated]
-    lagrange_values: Vec<Scalar>,
 }
 
 pub fn setup(
@@ -31,7 +29,7 @@ pub fn setup(
     tprime: usize,
     attributes: &[Scalar],
 ) -> Result<(PublicParameters, Vec<Issuer>), AtACTError> {
-    if tprime < 2 || tprime >= n || t < 2 || t >= num_issuers {
+    if tprime < 2 || tprime >= n - 1 || t < 2 || t >= num_issuers - 1 {
         return Err(AtACTError::InvalidParameters);
     }
 
@@ -44,7 +42,6 @@ pub fn setup(
         t,
         tprime,
         attributes: attributes.into(),
-        lagrange_values: vec![],
     };
 
     Ok((
@@ -218,7 +215,7 @@ impl Token {
             let mut buffer = [0u8; 1];
             reader.read(&mut buffer);
             let value = (u8::from_le_bytes(buffer) as usize) & mask;
-            if value < pp.n {
+            if value < pp.n && !ret.contains(&value) {
                 ret.push(value);
             }
         }
@@ -279,6 +276,8 @@ pub struct TokenProof {
 
 pub fn prove(token: &Token, rand: &Rand, pp: &PublicParameters) -> TokenProof {
     let c = token.hash_prime(pp);
+    debug_assert_eq!(c.len(), pp.tprime - 1);
+
     let ss = token
         .sks
         .iter()
@@ -317,7 +316,8 @@ pub fn verify(
     pp: &PublicParameters,
 ) -> Result<(), AtACTError> {
     let c = token.hash_prime(pp);
-    let lagrange = &pp.lagrange_values;
+    debug_assert_eq!(c.len(), pp.tprime - 1);
+
     let pk_prime = &token_proof.pk_prime;
     let mut errs = vec![];
 
@@ -336,8 +336,15 @@ pub fn verify(
         errs.push(AtACTError::InvalidZKProof);
     }
 
+    let lagrange = Lagrange::new(
+        (1..=pp.tprime)
+            .map(|i| Scalar::from(i as u64))
+            .collect::<Vec<_>>()
+            .as_ref(),
+    );
+
     let sk_prod: Signature = (0..pp.tprime)
-        .map(|k| &token_proof.ss[k] * lagrange[k])
+        .map(|k| &token_proof.ss[k] * lagrange.eval_j_0(k))
         .sum();
     if pairing(token.s.sigma_1, token_proof.pk_prime.pk_2) != pairing(sk_prod.sigma_1, pp.pk.pk_2) {
         errs.push(AtACTError::InvalidToken);
@@ -346,10 +353,9 @@ pub fn verify(
         errs.push(AtACTError::InvalidToken);
     }
 
-    let cm_base: Commitment = c
-        .iter()
-        .map(|k| &blind_request.cm_ks[*k] * lagrange[*k])
-        .sum();
+    let mut base_points: Vec<_> = c.iter().map(|k| Scalar::from(*k as u64 + 1)).collect();
+    base_points.push(Scalar::ZERO);
+    debug_assert_eq!(base_points.len(), pp.tprime);
 
     for k in 0..pp.n {
         if let Some(k_index) = c.iter().position(|v| k == *v) {
@@ -369,8 +375,20 @@ pub fn verify(
                 errs.push(AtACTError::InvalidSignature(k));
             }
         } else {
+            base_points[pp.tprime - 1] = Scalar::from(k as u64 + 1);
+            println!("{:?}", base_points);
+            let lagrange = Lagrange::new(&base_points);
+
+            let cm_base: Commitment = c
+                .iter()
+                .enumerate()
+                .map(|(j, k)| &blind_request.cm_ks[*k] * lagrange.eval_j_0(j))
+                .sum();
+
             // 29.d
-            if &blind_request.cm_ks[k] * lagrange[k] + &cm_base != blind_request.cm {
+            if &blind_request.cm_ks[k] * lagrange.eval_j_0(pp.tprime - 1) + &cm_base
+                != blind_request.cm
+            {
                 errs.push(AtACTError::InvalidCommitmentProof(k));
             }
         }
