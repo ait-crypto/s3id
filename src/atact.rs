@@ -20,6 +20,9 @@ pub struct PublicParameters {
     t: usize,
     tprime: usize,
     attributes: Vec<Scalar>,
+    lagrange_n: Lagrange,
+    lagrange_t: Lagrange,
+    lagrange_tprime: Lagrange,
 }
 
 pub fn setup(
@@ -42,6 +45,24 @@ pub fn setup(
         t,
         tprime,
         attributes: attributes.into(),
+        lagrange_n: Lagrange::new(
+            (1..=n)
+                .map(|i| Scalar::from(i as u64))
+                .collect::<Vec<_>>()
+                .as_ref(),
+        ),
+        lagrange_t: Lagrange::new(
+            (1..=t)
+                .map(|i| Scalar::from(i as u64))
+                .collect::<Vec<_>>()
+                .as_ref(),
+        ),
+        lagrange_tprime: Lagrange::new(
+            (1..=tprime)
+                .map(|i| Scalar::from(i as u64))
+                .collect::<Vec<_>>()
+                .as_ref(),
+        ),
     };
 
     Ok((
@@ -118,9 +139,12 @@ pub fn token_request(
         .map(|i| Scalar::from(i as u64))
         .collect();
     base_points.push(Scalar::from(pp.tprime as u64));
+    let mut lagrange = Lagrange::new(&base_points);
 
-    for _ in (pp.tprime - 1)..pp.n {
-        let lagrange = Lagrange::new(&base_points);
+    for k in pp.tprime..=pp.n {
+        if k != pp.tprime {
+            lagrange.update_point(pp.tprime - 1, Scalar::from(k as u64));
+        }
         // SAFETY: this is always non-0
         let lk_i = lagrange.eval_j_0(pp.tprime - 1).invert().unwrap();
 
@@ -141,7 +165,6 @@ pub fn token_request(
 
         coms.push(base_com * lk_i);
         rks.push(base_pk * lk_i);
-        base_points[pp.tprime - 1] += Scalar::ONE;
     }
 
     // Step 10
@@ -173,13 +196,7 @@ pub fn tissue(
     prv_j: &Issuer,
     pp: &PublicParameters,
 ) -> Result<Vec<BlindToken>, AtACTError> {
-    let lagrange = Lagrange::new(
-        (1..=pp.n)
-            .map(|i| Scalar::from(i as u64))
-            .collect::<Vec<_>>()
-            .as_ref(),
-    );
-    let check_cm = lagrange.eval_0(blind_request.cm_ks.as_ref());
+    let check_cm = pp.lagrange_n.eval_0(blind_request.cm_ks.as_ref());
 
     if check_cm != blind_request.cm {
         return Err(AtACTError::InvalidCommitment);
@@ -236,13 +253,6 @@ pub fn aggregate_unblind(
     }
     debug_assert_eq!(rand.r_ks.len(), pp.n);
 
-    let lagrange = Lagrange::new(
-        (1..=pp.t)
-            .map(|i| Scalar::from(i as u64))
-            .collect::<Vec<_>>()
-            .as_ref(),
-    );
-
     let sks: Vec<_> = (0..pp.n)
         .map(|k| {
             let sigs: Vec<_> = blind_tokens
@@ -251,18 +261,12 @@ pub fn aggregate_unblind(
                 .take(pp.t)
                 .cloned()
                 .collect();
-            Signature::from_shares(&sigs, &lagrange) - &rand.r_ks[k]
+            Signature::from_shares(&sigs, &pp.lagrange_t) - &rand.r_ks[k]
         })
         .collect();
 
-    let lagrange = Lagrange::new(
-        (1..=pp.n)
-            .map(|i| Scalar::from(i as u64))
-            .collect::<Vec<_>>()
-            .as_ref(),
-    );
     Token {
-        s: lagrange.eval_0(&sks),
+        s: pp.lagrange_n.eval_0(&sks),
         sks,
     }
 }
@@ -336,15 +340,8 @@ pub fn verify(
         errs.push(AtACTError::InvalidZKProof);
     }
 
-    let lagrange = Lagrange::new(
-        (1..=pp.tprime)
-            .map(|i| Scalar::from(i as u64))
-            .collect::<Vec<_>>()
-            .as_ref(),
-    );
-
     let sk_prod: Signature = (0..pp.tprime)
-        .map(|k| &token_proof.ss[k] * lagrange.eval_j_0(k))
+        .map(|k| &token_proof.ss[k] * pp.lagrange_tprime.eval_j_0(k))
         .sum();
     if pairing(token.s.sigma_1, token_proof.pk_prime.pk_2) != pairing(sk_prod.sigma_1, pp.pk.pk_2) {
         errs.push(AtACTError::InvalidToken);
@@ -354,8 +351,8 @@ pub fn verify(
     }
 
     let mut base_points: Vec<_> = c.iter().map(|k| Scalar::from(*k as u64 + 1)).collect();
-    base_points.push(Scalar::ZERO);
-    debug_assert_eq!(base_points.len(), pp.tprime);
+    base_points.push(Scalar::from(u64::MAX));
+    let mut lagrange = Lagrange::new(&base_points);
 
     for k in 0..pp.n {
         if let Some(k_index) = c.iter().position(|v| k == *v) {
@@ -375,8 +372,7 @@ pub fn verify(
                 errs.push(AtACTError::InvalidSignature(k));
             }
         } else {
-            base_points[pp.tprime - 1] = Scalar::from(k as u64 + 1);
-            let lagrange = Lagrange::new(&base_points);
+            lagrange.update_point(pp.tprime - 1, Scalar::from(k as u64 + 1));
 
             let cm_base: Commitment = c
                 .iter()

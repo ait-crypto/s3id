@@ -52,6 +52,7 @@ where
 #[derive(Debug)]
 pub struct GenericLagrange<T> {
     xs: Vec<T>,
+    evaluated_ell_j_0: Vec<T>,
 }
 
 impl<T> GenericLagrange<T>
@@ -59,7 +60,10 @@ where
     T: Field + From<u64>,
 {
     pub fn new(points: &[T]) -> Self {
-        Self { xs: points.into() }
+        Self {
+            xs: points.into(),
+            evaluated_ell_j_0: (0..points.len()).map(|j| ell_j_0(points, j)).collect(),
+        }
     }
 
     #[deprecated]
@@ -111,7 +115,37 @@ where
     }
 
     pub fn eval_j_0(&self, j: usize) -> T {
-        ell_j_0(self.xs.as_ref(), j)
+        self.evaluated_ell_j_0[j]
+
+        // ell_j_0(self.xs.as_ref(), j)
+
+        /*
+        *self
+            .evaluated_ell_j_0
+            .borrow_mut()
+            .entry(j)
+            .or_insert_with(|| ell_j_0(self.xs.as_ref(), j))
+            */
+    }
+
+    pub fn update_point(&mut self, k: usize, new_value: T) {
+        if self.xs[k] == new_value {
+            return;
+        }
+
+        for j in 0..self.xs.len() {
+            if k == j {
+                continue;
+            }
+
+            let num = (self.xs[j] - self.xs[k]) * new_value;
+            let denom = self.xs[k] * (self.xs[j] - new_value);
+
+            self.evaluated_ell_j_0[j] *= num * denom.invert().unwrap();
+        }
+
+        self.xs[k] = new_value;
+        self.evaluated_ell_j_0[k] = ell_j_0(&self.xs, k);
     }
 }
 
@@ -390,5 +424,20 @@ mod test {
             SmallScalar(8).invert().unwrap() * SmallScalar(8),
             SmallScalar(1)
         );
+    }
+
+    #[test]
+    fn lagrange_update() {
+        // check polynomial x^2
+
+        let xs_1 = [SmallScalar(1), SmallScalar(2), SmallScalar(3)];
+        let mut lagrange_1 = GenericLagrange::new(&xs_1);
+
+        let xs_2 = [SmallScalar(1), SmallScalar(2), SmallScalar(4)];
+        let lagrange_2 = GenericLagrange::new(&xs_2);
+
+        lagrange_1.update_point(2, xs_2[2]);
+        assert_eq!(lagrange_1.xs, lagrange_2.xs);
+        assert_eq!(lagrange_1.evaluated_ell_j_0, lagrange_2.evaluated_ell_j_0);
     }
 }
