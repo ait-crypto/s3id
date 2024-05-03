@@ -390,6 +390,19 @@ mod test {
 
         let sig = Signature::from_shares(&sigs[1..t + 1], &lagrange);
         assert!(pk.verify(b"test", &sig).is_ok());
+
+        let lagrange = Lagrange::new(
+            (1..=n)
+                .map(|i| Scalar::from(i as u64))
+                .collect::<Vec<_>>()
+                .as_ref(),
+        );
+        let pk = PublicKey::from_secret_key_shares(sks.iter(), &lagrange);
+        assert!(pk.is_valid());
+        assert_eq!(pk, sk.to_public_key());
+
+        let sig = Signature::from_shares(&sigs, &lagrange);
+        assert!(pk.verify(b"test", &sig).is_ok());
     }
 
     #[test]

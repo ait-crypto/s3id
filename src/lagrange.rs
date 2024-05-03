@@ -38,6 +38,7 @@ where
                 (num * (x - xm), denom * (xj - xm))
             }
         });
+    // SAFETY: denom is always != 0
     num * denom.invert().unwrap()
 }
 
@@ -59,6 +60,7 @@ where
                 (-num * xm, denom * (xj - xm))
             }
         });
+    // SAFETY: denom is always != 0
     num * denom.invert().unwrap()
 }
 

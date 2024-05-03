@@ -20,6 +20,7 @@ pub struct PublicParameters {
     t: usize,
     tprime: usize,
     attributes: Vec<Scalar>,
+    #[deprecated]
     lagrange_values: Vec<Scalar>,
 }
 
@@ -35,20 +36,24 @@ pub fn setup(
     }
 
     let sk = SecretKey::new();
-    let lagrange = Lagrange::new_with_base_points(n);
-
-    let issuer_sks = sk.into_shares(num_issuers, t);
+    let pk = sk.to_public_key();
 
     let pp = PublicParameters {
-        pk: sk.to_public_key(),
+        pk,
         n,
         t,
         tprime,
         attributes: attributes.into(),
-        lagrange_values: (0..n).map(|j| lagrange.eval_j_0(j)).collect(),
+        lagrange_values: vec![],
     };
 
-    Ok((pp, issuer_sks.into_iter().map(|sk| Issuer { sk }).collect()))
+    Ok((
+        pp,
+        sk.into_shares(num_issuers, t)
+            .into_iter()
+            .map(|sk| Issuer { sk })
+            .collect(),
+    ))
 }
 
 #[derive(Clone)]
@@ -110,30 +115,36 @@ pub fn token_request(
     }
 
     // Step 9
-    let lagrange_values = &pp.lagrange_values;
     let pk_r = &pp.pk * strg.r;
 
-    let mut base_com = coms
-        .iter()
-        .enumerate()
-        .map(|(j, comj)| comj * lagrange_values[j])
-        .sum();
-    let mut base_pk = rks
-        .iter()
-        .enumerate()
-        .map(|(j, rj)| rj * lagrange_values[j])
-        .sum();
+    let mut base_points: Vec<_> = (1..=pp.tprime - 1)
+        .map(|i| Scalar::from(i as u64))
+        .collect();
+    base_points.push(Scalar::from(pp.tprime as u64));
 
-    for k in (pp.tprime - 1)..pp.n {
+    for _ in (pp.tprime - 1)..pp.n {
+        let lagrange = Lagrange::new(&base_points);
         // SAFETY: this is always non-0
-        let lk_1 = lagrange_values[k].invert().unwrap();
+        let lk_i = lagrange.eval_j_0(pp.tprime - 1).invert().unwrap();
 
-        coms.push((commitment - &base_com) * lk_1);
-        rks.push((&pk_r - &base_pk) * lk_1);
+        let base_com = commitment
+            - &coms
+                .iter()
+                .take(pp.tprime - 1)
+                .enumerate()
+                .map(|(j, comj)| comj * lagrange.eval_j_0(j))
+                .sum::<Commitment>();
+        let base_pk = &pk_r
+            - &rks
+                .iter()
+                .take(pp.tprime - 1)
+                .enumerate()
+                .map(|(j, rj)| rj * lagrange.eval_j_0(j))
+                .sum::<PublicKey>();
 
-        // FIXME: according to the protocol this should not be needed!
-        base_com = base_com + &(&coms[k] * lagrange_values[k]);
-        base_pk = base_pk + &(&rks[k] * lagrange_values[k]);
+        coms.push(base_com * lk_i);
+        rks.push(base_pk * lk_i);
+        base_points[pp.tprime - 1] += Scalar::ONE;
     }
 
     // Step 10
@@ -165,13 +176,14 @@ pub fn tissue(
     prv_j: &Issuer,
     pp: &PublicParameters,
 ) -> Result<Vec<BlindToken>, AtACTError> {
-    let lagrange = &pp.lagrange_values;
-    let check_cm: Commitment = blind_request
-        .cm_ks
-        .iter()
-        .enumerate()
-        .map(|(index, cm_k)| cm_k * lagrange[index])
-        .sum();
+    let lagrange = Lagrange::new(
+        (1..=pp.n)
+            .map(|i| Scalar::from(i as u64))
+            .collect::<Vec<_>>()
+            .as_ref(),
+    );
+    let check_cm = lagrange.eval_0(blind_request.cm_ks.as_ref());
+
     if check_cm != blind_request.cm {
         return Err(AtACTError::InvalidCommitment);
     }
@@ -227,20 +239,35 @@ pub fn aggregate_unblind(
     }
     debug_assert_eq!(rand.r_ks.len(), pp.n);
 
-    let lagrange = &pp.lagrange_values;
+    let lagrange = Lagrange::new(
+        (1..=pp.t)
+            .map(|i| Scalar::from(i as u64))
+            .collect::<Vec<_>>()
+            .as_ref(),
+    );
+
     let sks: Vec<_> = (0..pp.n)
         .map(|k| {
-            let tmp = blind_tokens.iter().map(|token| &token[k].sigma).take(pp.t);
-            Signature::from_iter(tmp) - &rand.r_ks[k]
+            let sigs: Vec<_> = blind_tokens
+                .iter()
+                .map(|token| &token[k].sigma)
+                .take(pp.t)
+                .cloned()
+                .collect();
+            Signature::from_shares(&sigs, &lagrange) - &rand.r_ks[k]
         })
         .collect();
-    let s = sks
-        .iter()
-        .enumerate()
-        .map(|(k, signature)| signature * lagrange[k])
-        .sum();
 
-    Token { s, sks }
+    let lagrange = Lagrange::new(
+        (1..=pp.n)
+            .map(|i| Scalar::from(i as u64))
+            .collect::<Vec<_>>()
+            .as_ref(),
+    );
+    Token {
+        s: lagrange.eval_0(&sks),
+        sks,
+    }
 }
 
 pub struct TokenProof {

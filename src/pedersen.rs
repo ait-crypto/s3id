@@ -9,8 +9,9 @@ use group::ff::Field;
 use sha2::{Digest, Sha512};
 use thiserror::Error;
 
-use crate::bls381_helpers::{
-    hash_with_domain_separation_1, hash_with_domain_separation_2, SerdeWrapper,
+use crate::{
+    bls381_helpers::{hash_with_domain_separation_1, hash_with_domain_separation_2, SerdeWrapper},
+    lagrange::Groupish,
 };
 
 pub fn get_g() -> &'static G1Projective {
@@ -377,6 +378,8 @@ impl Mul<Scalar> for &Commitment {
         }
     }
 }
+
+impl Groupish<Scalar> for Commitment {}
 
 #[cfg(test)]
 mod test {
