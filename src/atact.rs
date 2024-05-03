@@ -376,7 +376,6 @@ pub fn verify(
             }
         } else {
             base_points[pp.tprime - 1] = Scalar::from(k as u64 + 1);
-            println!("{:?}", base_points);
             let lagrange = Lagrange::new(&base_points);
 
             let cm_base: Commitment = c

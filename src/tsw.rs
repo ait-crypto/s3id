@@ -12,7 +12,7 @@ use signature::{Signer, Verifier};
 
 use crate::{
     bls381_helpers::{self, hash_1, hash_2, hash_to_scalar, hash_usize_1, hash_usize_2, pairing},
-    lagrange::{Groupish, Lagrange},
+    lagrange::Lagrange,
     pedersen::{get_g, get_ghat, get_u, get_uhat, Commitment},
 };
 
@@ -260,8 +260,6 @@ impl Sum<PublicKey> for PublicKey {
     }
 }
 
-impl Groupish<Scalar> for PublicKey {}
-
 // this is abuse of notation
 impl Sub<&PublicKey> for Signature {
     type Output = Signature;
@@ -339,8 +337,6 @@ impl Sum for Signature {
         Signature { sigma_1, sigma_2 }
     }
 }
-
-impl Groupish<Scalar> for Signature {}
 
 #[cfg(test)]
 mod test {

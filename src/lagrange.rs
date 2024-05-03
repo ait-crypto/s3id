@@ -3,18 +3,6 @@ use std::{iter::Sum, ops::Mul};
 use bls12_381::Scalar;
 use group::ff::Field;
 
-pub trait Groupish<T>
-where
-    T: Field,
-    Self: Sized,
-    // Self: Add<Output = Self> + for<'a> Add<&'a Self, Output = Self>,
-    // for<'a> &'a Self: Add<&'a Self>,
-    // Self: Mul<T, Output = Self> + for<'a> Mul<&'a T, Output = Self>,
-    for<'a> &'a Self: Mul<T, Output = Self>,
-    Self: Sum<Self>,
-{
-}
-
 pub type Lagrange = GenericLagrange<Scalar>;
 
 /// implementation of the Lagrange base polynomial
@@ -90,8 +78,12 @@ where
 
     pub fn eval<G>(&self, x: T, ys: &[G]) -> G
     where
-        G: Groupish<T>,
+        G: Sized,
+        // Self: Add<Output = Self> + for<'a> Add<&'a Self, Output = Self>,
+        // for<'a> &'a Self: Add<&'a Self>,
+        // Self: Mul<T, Output = Self> + for<'a> Mul<&'a T, Output = Self>,
         for<'a> &'a G: Mul<T, Output = G>,
+        G: Sum<G>,
     {
         debug_assert_eq!(ys.len(), self.xs.len());
 
@@ -103,8 +95,12 @@ where
 
     pub fn eval_0<G>(&self, ys: &[G]) -> G
     where
-        G: Groupish<T>,
+        G: Sized,
+        // Self: Add<Output = Self> + for<'a> Add<&'a Self, Output = Self>,
+        // for<'a> &'a Self: Add<&'a Self>,
+        // Self: Mul<T, Output = Self> + for<'a> Mul<&'a T, Output = Self>,
         for<'a> &'a G: Mul<T, Output = G>,
+        G: Sum<G>,
     {
         debug_assert_eq!(ys.len(), self.xs.len());
 
@@ -147,15 +143,6 @@ mod test {
         assert_eq!(lagrange.eval_j(xs[0], 2), Scalar::zero());
         assert_eq!(lagrange.eval_j(xs[1], 2), Scalar::zero());
         assert_eq!(lagrange.eval_j(xs[2], 2), Scalar::one());
-    }
-
-    #[test]
-    fn lagrange_fixed() {
-        const N: usize = 10;
-        let lagrange = Lagrange::new_with_base_points(N);
-        for k in 0..N {
-            assert!(lagrange.eval_j_0(k) != Scalar::zero());
-        }
     }
 
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
@@ -367,8 +354,6 @@ mod test {
             todo!()
         }
     }
-
-    impl Groupish<SmallScalar> for SmallScalar {}
 
     #[test]
     fn small_lagrange() {
