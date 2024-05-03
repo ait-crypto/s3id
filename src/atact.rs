@@ -29,7 +29,7 @@ pub fn setup(
     tprime: usize,
     attributes: &[Scalar],
 ) -> Result<(PublicParameters, Vec<Issuer>), AtACTError> {
-    if tprime < 2 || tprime >= n - 1 || t < 2 || t >= num_issuers - 1 {
+    if tprime < 2 || tprime >= n || t < 2 || t >= num_issuers {
         return Err(AtACTError::InvalidParameters);
     }
 
@@ -456,6 +456,33 @@ mod test {
             let token = aggregate_unblind(&blind_tokens, &rand, &pp);
             let token_proof = prove(&token, &rand, &pp);
             assert_eq!(verify(&token, &token_proof, &blind_request, &pp), Ok(()));
+        }
+    }
+
+    #[test]
+    fn parameters_for_benches() {
+        const NUM_ISSUERS: [usize; 3] = [4, 16, 64];
+        const N: [usize; 3] = [30, 40, 128];
+        const NUM_ATTRIBUTES: usize = 10;
+
+        let attributes: Vec<_> = (0..NUM_ATTRIBUTES)
+            .map(|x| Scalar::from(x as u64))
+            .collect();
+
+        for num_issuers in NUM_ISSUERS {
+            for n in N {
+                let t = num_issuers / 2 + 1;
+                let tprime = n / 2 + 1;
+
+                assert!(
+                    setup(num_issuers, n, t, tprime, &attributes).is_ok(),
+                    "issuers {}, t {}, n {}, t' {}",
+                    num_issuers,
+                    t,
+                    n,
+                    tprime
+                );
+            }
         }
     }
 }

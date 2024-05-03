@@ -1,7 +1,4 @@
-use std::{
-    iter::Sum,
-    ops::{Add, Mul},
-};
+use std::{iter::Sum, ops::Mul};
 
 use bls12_381::Scalar;
 use group::ff::Field;
