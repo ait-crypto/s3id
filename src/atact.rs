@@ -32,7 +32,7 @@ pub fn setup(
     tprime: usize,
     attributes: &[Scalar],
 ) -> Result<(PublicParameters, Vec<Issuer>), AtACTError> {
-    if tprime < 2 || tprime >= n || t < 2 || t >= num_issuers {
+    if tprime < 2 || tprime >= n || t < 2 || t >= num_issuers || attributes.is_empty() {
         return Err(AtACTError::InvalidParameters);
     }
 
