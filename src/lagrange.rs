@@ -42,7 +42,7 @@ where
             if m == j {
                 (num, denom)
             } else {
-                (-num * xm, denom * (xj - xm))
+                (num * xm, denom * (*xm - xj))
             }
         });
     // SAFETY: denom is always != 0
