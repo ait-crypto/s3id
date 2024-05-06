@@ -41,6 +41,27 @@ pub enum Error {
     InvalidProof,
 }
 
+pub struct MultiBasePublicParameters {
+    us: Vec<G1Projective>,
+    uhats: Vec<G2Projective>,
+}
+
+impl MultiBasePublicParameters {
+    pub fn new(l: usize) -> Self {
+        let us = (0..l).map(|idx| {
+            hash_with_domain_separation_1(&(idx as u64).to_le_bytes(), b"Multi-Pedersen-PP")
+        });
+        let uhats = (0..l).map(|idx| {
+            hash_with_domain_separation_2(&(idx as u64).to_le_bytes(), b"Multi-Pedersen-PP")
+        });
+
+        Self {
+            us: us.collect(),
+            uhats: uhats.collect(),
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct Commitment {
     pub(crate) cm_1: G1Projective,
@@ -76,11 +97,24 @@ pub struct Proof {
     s_2: Scalar,
 }
 
+pub struct ProofIndexCommit {
+    t_1: G1Projective,
+    t_2: G2Projective,
+    s_1: Scalar,
+    s_2: Scalar,
+    s_3: Scalar,
+}
+
 pub struct Proof2PK {
     pi_1: Proof,
     pi_2: Proof,
     t3_1: G1Projective,
     t3_2: G2Projective,
+}
+
+pub struct ProofMultiBase {
+    pi_1: Proof,
+    pi_2: ProofIndexCommit,
 }
 
 #[inline]
@@ -202,6 +236,7 @@ impl Commitment {
         self.verify_proof_with_challenge(&c, proof)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn proof_2_pk(
         &self,
         message: &Scalar,
@@ -293,6 +328,134 @@ impl Commitment {
 
         if base_1 * proof.pi_2.s_2 != proof.t3_1 + pk_1 * c
             || base_2 * proof.pi_2.s_2 != proof.t3_2 + pk_2 * c
+        {
+            Err(Error::InvalidProof)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn index_commit(
+        value_0: &Scalar,
+        idx: usize,
+        value_i: &Scalar,
+        pp: &MultiBasePublicParameters,
+    ) -> (Commitment, Opening) {
+        debug_assert!(idx < pp.us.len());
+
+        let r = Scalar::random(rand::thread_rng());
+        (
+            Commitment {
+                cm_1: get_g() * r + get_u() * value_0 + pp.us[idx] * value_i,
+                cm_2: get_ghat() * r + get_uhat() * value_0 + pp.uhats[idx] * value_i,
+            },
+            Opening { r },
+        )
+    }
+
+    pub fn verify_index_commit(
+        &self,
+        value_0: &Scalar,
+        idx: usize,
+        value_i: &Scalar,
+        opening: &Opening,
+        pp: &MultiBasePublicParameters,
+    ) -> Result<(), Error> {
+        debug_assert!(idx < pp.us.len());
+
+        match (
+            self.cm_1 == get_g() * opening.r + get_u() * value_0 + pp.us[idx] * value_i,
+            self.cm_2 == get_ghat() * opening.r + get_uhat() * value_0 + pp.uhats[idx] * value_i,
+        ) {
+            (true, true) => Ok(()),
+            _ => Err(Error::InvalidOpening),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn proof_index_commit(
+        &self,
+        message: &Scalar,
+        opening: &Opening,
+        commitment_2: &Commitment,
+        value_0: &Scalar,
+        idx: usize,
+        value_i: &Scalar,
+        opening_2: &Opening,
+        pp: &MultiBasePublicParameters,
+    ) -> ProofMultiBase {
+        let mut rng = rand::thread_rng();
+        let r1_1 = Scalar::random(&mut rng);
+        let r1_2 = Scalar::random(&mut rng);
+        let t1_1 = get_g() * r1_1 + get_u() * r1_2;
+        let t1_2 = get_ghat() * r1_1 + get_uhat() * r1_2;
+
+        let r2_1 = Scalar::random(&mut rng);
+        let r2_2 = Scalar::random(&mut rng);
+        let r2_3 = Scalar::random(&mut rng);
+        let t2_1 = get_g() * r2_1 + get_u() * r2_2 + pp.us[idx] * r2_3;
+        let t2_2 = get_ghat() * r2_1 + get_uhat() * r2_2 + pp.uhats[idx] * r2_3;
+
+        let mut hasher = hash_context();
+        hash_g1(&mut hasher, &pp.us[idx]);
+        hash_g2(&mut hasher, &pp.uhats[idx]);
+        hash_commitment(&mut hasher, self);
+        hash_commitment(&mut hasher, commitment_2);
+        hash_g1(&mut hasher, &t1_1);
+        hash_g2(&mut hasher, &t1_2);
+        hash_g1(&mut hasher, &t2_1);
+        hash_g2(&mut hasher, &t2_2);
+        let c = hash_extract_scalar(hasher);
+
+        let s1_1 = r1_1 + opening.r * c;
+        let s1_2 = r1_2 + message * c;
+        let s2_1 = r2_1 + opening_2.r * c;
+        let s2_2 = r2_2 + value_0 * c;
+        let s2_3 = r2_3 + value_i * c;
+
+        ProofMultiBase {
+            pi_1: Proof {
+                t_1: t1_1,
+                t_2: t1_2,
+                s_1: s1_1,
+                s_2: s1_2,
+            },
+            pi_2: ProofIndexCommit {
+                t_1: t2_1,
+                t_2: t2_2,
+                s_1: s2_1,
+                s_2: s2_2,
+                s_3: s2_3,
+            },
+        }
+    }
+
+    pub fn verify_proof_index_commit(
+        &self,
+        commitment_2: &Commitment,
+        idx: usize,
+        proof: &ProofMultiBase,
+        pp: &MultiBasePublicParameters,
+    ) -> Result<(), Error> {
+        let mut hasher = hash_context();
+        hash_g1(&mut hasher, &pp.us[idx]);
+        hash_g2(&mut hasher, &pp.uhats[idx]);
+        hash_commitment(&mut hasher, self);
+        hash_commitment(&mut hasher, commitment_2);
+        hash_g1(&mut hasher, &proof.pi_1.t_1);
+        hash_g2(&mut hasher, &proof.pi_1.t_2);
+        hash_g1(&mut hasher, &proof.pi_2.t_1);
+        hash_g2(&mut hasher, &proof.pi_2.t_2);
+        let c = hash_extract_scalar(hasher);
+
+        self.verify_proof_with_challenge(&c, &proof.pi_1)?;
+
+        if get_g() * proof.pi_2.s_1 + get_u() * proof.pi_2.s_2 + pp.us[idx] * proof.pi_2.s_3
+            != proof.pi_2.t_1 + commitment_2.cm_1 * c
+            || get_ghat() * proof.pi_2.s_1
+                + get_uhat() * proof.pi_2.s_2
+                + pp.uhats[idx] * proof.pi_2.s_3
+                != proof.pi_2.t_2 + commitment_2.cm_2 * c
         {
             Err(Error::InvalidProof)
         } else {
@@ -423,5 +586,44 @@ mod test {
         assert!(cm_1
             .verify_proof_2_pk(&cm_2, get_g(), get_ghat(), &pk_1, &pk_2, &proof)
             .is_ok());
+    }
+
+    #[test]
+    fn multi_pedersen() {
+        let l = 10;
+        let pp = MultiBasePublicParameters::new(l);
+
+        let value_0 = Scalar::random(rand::thread_rng());
+        for idx in 0..l {
+            let value_i = Scalar::random(rand::thread_rng());
+            let (cm, o) = Commitment::index_commit(&value_0, idx, &value_i, &pp);
+            assert!(cm
+                .verify_index_commit(&value_0, idx, &value_i, &o, &pp)
+                .is_ok());
+        }
+    }
+
+    #[test]
+    fn multi_pedersen_proof() {
+        let msg = Scalar::random(rand::thread_rng());
+        let (commitment, opening) = Commitment::commit(&msg);
+
+        let l = 10;
+        let pp = MultiBasePublicParameters::new(l);
+
+        let value_0 = Scalar::random(rand::thread_rng());
+        for idx in 0..l {
+            let value_i = Scalar::random(rand::thread_rng());
+            let (cm, o) = Commitment::index_commit(&value_0, idx, &value_i, &pp);
+            assert!(cm
+                .verify_index_commit(&value_0, idx, &value_i, &o, &pp)
+                .is_ok());
+
+            let proof = commitment
+                .proof_index_commit(&msg, &opening, &cm, &value_0, idx, &value_i, &o, &pp);
+            assert!(commitment
+                .verify_proof_index_commit(&cm, idx, &proof, &pp)
+                .is_ok())
+        }
     }
 }
