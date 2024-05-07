@@ -471,17 +471,20 @@ impl Commitment {
         }
     }
 
-    pub fn multi_index_commit<'a, I>(
+    pub fn multi_index_commit<I>(
         value_0: &Scalar,
         iter: I,
         pp: &MultiBasePublicParameters,
     ) -> (Commitment, Opening)
     where
-        I: Iterator<Item = (usize, &'a Scalar)>,
+        I: Iterator<Item = (usize, Scalar)>,
     {
         let r = Scalar::random(rand::thread_rng());
         let (cm_1, cm_2) = iter.fold(
-            (get_g() * r + get_u(), get_ghat() * r + get_uhat() * value_0),
+            (
+                get_g() * r + get_u() * value_0,
+                get_ghat() * r + get_uhat() * value_0,
+            ),
             |(cm_1, cm_2), (idx, value_i)| {
                 debug_assert!(idx < pp.us.len());
                 (cm_1 + pp.us[idx] * value_i, cm_2 + pp.uhats[idx] * value_i)
@@ -491,7 +494,7 @@ impl Commitment {
         (Commitment { cm_1, cm_2 }, Opening { r })
     }
 
-    pub fn verify_multi_index_commit<'a, I>(
+    pub fn verify_multi_index_commit<I>(
         &self,
         value_0: &Scalar,
         iter: I,
@@ -499,7 +502,7 @@ impl Commitment {
         pp: &MultiBasePublicParameters,
     ) -> Result<(), Error>
     where
-        I: Iterator<Item = (usize, &'a Scalar)>,
+        I: Iterator<Item = (usize, Scalar)>,
     {
         let (cm_1, cm_2) = iter.fold(
             (
@@ -519,7 +522,7 @@ impl Commitment {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn proof_multi_index_commit<'a, I>(
+    pub fn proof_multi_index_commit<I>(
         &self,
         value_0: &Scalar,
         iter: I,
@@ -527,7 +530,7 @@ impl Commitment {
         pp: &MultiBasePublicParameters,
     ) -> ProofMultiIndex
     where
-        I: Iterator<Item = (usize, &'a Scalar)> + ExactSizeIterator,
+        I: Iterator<Item = (usize, Scalar)> + ExactSizeIterator,
     {
         let randoms_and_values = Vec::with_capacity(iter.len());
 
@@ -769,5 +772,40 @@ mod test {
                 .verify_proof_index_commit(&cm, idx, &proof, &pp)
                 .is_ok())
         }
+    }
+
+    #[test]
+    fn multi_index_pedersen() {
+        let l = 10;
+        let pp = MultiBasePublicParameters::new(l);
+
+        let value_0 = Scalar::random(rand::thread_rng());
+        let values = [
+            (2usize, Scalar::random(rand::thread_rng())),
+            (7usize, Scalar::random(rand::thread_rng())),
+        ];
+        let (cm, o) = Commitment::multi_index_commit(&value_0, values.iter().copied(), &pp);
+        assert!(cm
+            .verify_multi_index_commit(&value_0, values.iter().copied(), &o, &pp)
+            .is_ok());
+    }
+
+    #[test]
+    fn multi_index_pedersen_proof() {
+        let l = 10;
+        let pp = MultiBasePublicParameters::new(l);
+
+        let value_0 = Scalar::random(rand::thread_rng());
+        let values = [
+            (2usize, Scalar::random(rand::thread_rng())),
+            (7usize, Scalar::random(rand::thread_rng())),
+        ];
+        let (cm, o) = Commitment::multi_index_commit(&value_0, values.iter().copied(), &pp);
+        assert!(cm
+            .verify_multi_index_commit(&value_0, values.iter().copied(), &o, &pp)
+            .is_ok());
+
+        let proof = cm.proof_multi_index_commit(&value_0, values.iter().copied(), &o, &pp);
+        assert!(cm.verify_proof_multi_index_commit(&proof, &pp).is_ok());
     }
 }
