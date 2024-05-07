@@ -117,6 +117,14 @@ pub struct ProofMultiBase {
     pi_2: ProofIndexCommit,
 }
 
+pub struct ProofMultiIndex {
+    t_1: G1Projective,
+    t_2: G2Projective,
+    s_1: Scalar,
+    s_2: Scalar,
+    s_i: Vec<(usize, Scalar)>,
+}
+
 #[inline]
 fn hash_g1<D>(hasher: &mut D, g1: &G1Projective)
 where
@@ -457,6 +465,142 @@ impl Commitment {
                 + pp.uhats[idx] * proof.pi_2.s_3
                 != proof.pi_2.t_2 + commitment_2.cm_2 * c
         {
+            Err(Error::InvalidProof)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn multi_index_commit<'a, I>(
+        value_0: &Scalar,
+        iter: I,
+        pp: &MultiBasePublicParameters,
+    ) -> (Commitment, Opening)
+    where
+        I: Iterator<Item = (usize, &'a Scalar)>,
+    {
+        let r = Scalar::random(rand::thread_rng());
+        let (cm_1, cm_2) = iter.fold(
+            (get_g() * r + get_u(), get_ghat() * r + get_uhat() * value_0),
+            |(cm_1, cm_2), (idx, value_i)| {
+                debug_assert!(idx < pp.us.len());
+                (cm_1 + pp.us[idx] * value_i, cm_2 + pp.uhats[idx] * value_i)
+            },
+        );
+
+        (Commitment { cm_1, cm_2 }, Opening { r })
+    }
+
+    pub fn verify_multi_index_commit<'a, I>(
+        &self,
+        value_0: &Scalar,
+        iter: I,
+        opening: &Opening,
+        pp: &MultiBasePublicParameters,
+    ) -> Result<(), Error>
+    where
+        I: Iterator<Item = (usize, &'a Scalar)>,
+    {
+        let (cm_1, cm_2) = iter.fold(
+            (
+                get_g() * opening.r + get_u() * value_0,
+                get_ghat() * opening.r + get_uhat() * value_0,
+            ),
+            |(cm_1, cm_2), (idx, value_i)| {
+                debug_assert!(idx < pp.us.len());
+                (cm_1 + pp.us[idx] * value_i, cm_2 + pp.uhats[idx] * value_i)
+            },
+        );
+
+        match (self.cm_1 == cm_1, self.cm_2 == cm_2) {
+            (true, true) => Ok(()),
+            _ => Err(Error::InvalidOpening),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn proof_multi_index_commit<'a, I>(
+        &self,
+        value_0: &Scalar,
+        iter: I,
+        opening: &Opening,
+        pp: &MultiBasePublicParameters,
+    ) -> ProofMultiIndex
+    where
+        I: Iterator<Item = (usize, &'a Scalar)> + ExactSizeIterator,
+    {
+        let randoms_and_values = Vec::with_capacity(iter.len());
+
+        let mut rng = rand::thread_rng();
+        let r1 = Scalar::random(&mut rng);
+        let r2 = Scalar::random(&mut rng);
+        let mut hasher = hash_context();
+
+        let (t_1, t_2, randoms_and_values) = iter.fold(
+            (
+                get_g() * r1 + get_u() * r2,
+                get_ghat() * r1 + get_uhat() * r2,
+                randoms_and_values,
+            ),
+            |(t1, t2, mut randoms_and_values), (idx, value_i)| {
+                let random = Scalar::random(&mut rng);
+                randoms_and_values.push((idx, random, value_i));
+                hash_g1(&mut hasher, &pp.us[idx]);
+                hash_g2(&mut hasher, &pp.uhats[idx]);
+                (
+                    t1 + pp.us[idx] * random,
+                    t2 + pp.uhats[idx] * random,
+                    randoms_and_values,
+                )
+            },
+        );
+
+        hash_commitment(&mut hasher, self);
+        hash_g1(&mut hasher, &t_1);
+        hash_g2(&mut hasher, &t_2);
+        let c = hash_extract_scalar(hasher);
+
+        let s_1 = r1 + opening.r * c;
+        let s_2 = r2 + value_0 * c;
+
+        ProofMultiIndex {
+            t_1,
+            t_2,
+            s_1,
+            s_2,
+            s_i: randoms_and_values
+                .into_iter()
+                .map(|(idx, r_i, value_i)| (idx, r_i + value_i * c))
+                .collect(),
+        }
+    }
+
+    pub fn verify_proof_multi_index_commit(
+        &self,
+        proof: &ProofMultiIndex,
+        pp: &MultiBasePublicParameters,
+    ) -> Result<(), Error> {
+        let mut hasher = hash_context();
+
+        let (c_1, c_2) = proof.s_i.iter().fold(
+            (
+                get_g() * proof.s_1 + get_u() * proof.s_2,
+                get_ghat() * proof.s_1 + get_uhat() * proof.s_2,
+            ),
+            |(c_1, c_2), (idx, s_i)| {
+                hash_g1(&mut hasher, &pp.us[*idx]);
+                hash_g2(&mut hasher, &pp.uhats[*idx]);
+
+                (c_1 + pp.us[*idx] * s_i, c_2 + pp.uhats[*idx] * s_i)
+            },
+        );
+
+        hash_commitment(&mut hasher, self);
+        hash_g1(&mut hasher, &proof.t_1);
+        hash_g2(&mut hasher, &proof.t_2);
+        let c = hash_extract_scalar(hasher);
+
+        if c_1 != proof.t_1 + self.cm_1 * c || c_2 != proof.t_2 + self.cm_2 * c {
             Err(Error::InvalidProof)
         } else {
             Ok(())

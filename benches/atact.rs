@@ -3,23 +3,13 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use group::ff::Field;
 use s3id::atact::*;
 
-fn bench_atact(
-    c: &mut Criterion,
-    num_attributes: usize,
-    num_issuers: usize,
-    n: usize,
-    t: usize,
-    tprime: usize,
-) {
+fn bench_atact(c: &mut Criterion, num_issuers: usize, n: usize, t: usize, tprime: usize) {
     let mut c = c.benchmark_group(format!("(N, n, t, t') = {:?}", (num_issuers, n, t, tprime)));
 
     let mut rng = rand::thread_rng();
-    let attributes: Vec<_> = (0..num_attributes)
-        .map(|_| Scalar::random(&mut rng))
-        .collect();
-    let a = attributes[0];
+    let a = Scalar::random(&mut rng);
 
-    let (pp, issuers) = setup(num_issuers, n, t, tprime, &attributes).expect("setup failed");
+    let (pp, issuers) = setup(num_issuers, n, t, tprime).expect("setup failed");
 
     c.bench_function("register", |b| {
         b.iter(|| {
@@ -86,14 +76,13 @@ fn bench_atact(
 
 const NUM_ISSUERS: [usize; 3] = [4, 16, 64];
 const N: [usize; 3] = [30, 40, 128];
-const NUM_ATTRIBUTES: usize = 10;
 
 fn bench_params(c: &mut Criterion) {
     for num_issuers in NUM_ISSUERS {
         for n in N {
             let t = num_issuers / 2 + 1;
             let tprime = n / 2 + 1;
-            bench_atact(c, NUM_ATTRIBUTES, num_issuers, n, t, tprime)
+            bench_atact(c, num_issuers, n, t, tprime)
         }
     }
 }

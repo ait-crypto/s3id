@@ -10,18 +10,25 @@ use crate::{
     tsw::{PublicKey, SecretKey, Signature},
 };
 
+const UNIQUE_ATTRIBUTE_INDEX: usize = 0;
+
 pub struct Issuer {
     sk: SecretKey,
 }
 
+impl AsRef<SecretKey> for Issuer {
+    fn as_ref(&self) -> &SecretKey {
+        &self.sk
+    }
+}
+
 pub struct PublicParameters {
-    pk: PublicKey,
-    n: usize,
-    t: usize,
-    tprime: usize,
-    attributes: Vec<Scalar>,
-    lagrange_n: Lagrange,
-    lagrange_t: Lagrange,
+    pub pk: PublicKey,
+    pub n: usize,
+    pub t: usize,
+    pub tprime: usize,
+    pub lagrange_n: Lagrange,
+    pub lagrange_t: Lagrange,
     lagrange_tprime: Lagrange,
 }
 
@@ -30,9 +37,8 @@ pub fn setup(
     n: usize,
     t: usize,
     tprime: usize,
-    attributes: &[Scalar],
 ) -> Result<(PublicParameters, Vec<Issuer>), AtACTError> {
-    if tprime < 2 || tprime >= n || t < 2 || t >= num_issuers || attributes.is_empty() {
+    if tprime < 2 || tprime >= n || t < 2 || t >= num_issuers {
         return Err(AtACTError::InvalidParameters);
     }
 
@@ -44,7 +50,6 @@ pub fn setup(
         n,
         t,
         tprime,
-        attributes: attributes.into(),
         lagrange_n: Lagrange::new(
             (1..=n)
                 .map(|i| Scalar::from(i as u64))
@@ -77,24 +82,16 @@ pub fn setup(
 #[derive(Clone)]
 pub struct StRG {
     a: Scalar,
-    attribute_index: usize,
     r: Scalar,
 }
 
-pub fn register(a: &Scalar, pp: &PublicParameters) -> Result<(StRG, Commitment), AtACTError> {
-    let attribute_index = pp
-        .attributes
-        .iter()
-        .position(|attribute| *a == *attribute)
-        .ok_or(AtACTError::InvalidAttribute)?;
-
+pub fn register(a: &Scalar, _pp: &PublicParameters) -> Result<(StRG, Commitment), AtACTError> {
     // Step 7
     let (cm, opening) = Commitment::commit(a);
 
     Ok((
         StRG {
             a: *a,
-            attribute_index,
             r: *opening.as_ref(),
         },
         cm,
@@ -105,7 +102,6 @@ pub struct BlindRequest {
     cm: Commitment,
     cm_ks: Vec<Commitment>,
     bold_cm_k: Commitment,
-    attribute_index: usize,
 }
 
 pub struct Rand {
@@ -175,7 +171,6 @@ pub fn token_request(
         BlindRequest {
             cm: commitment.clone(),
             cm_ks: coms,
-            attribute_index: strg.attribute_index,
             bold_cm_k,
         },
         Rand {
@@ -208,7 +203,7 @@ pub fn tissue(
         .map(|commitment| BlindToken {
             sigma: prv_j
                 .sk
-                .sign_pedersen_commitment(commitment, blind_request.attribute_index),
+                .sign_pedersen_commitment(commitment, UNIQUE_ATTRIBUTE_INDEX),
         })
         .collect())
 }
@@ -362,11 +357,7 @@ pub fn verify(
 
             let sigma = sk_prime + rk_prime;
             if pk_prime
-                .verify_pedersen_commitment(
-                    &blind_request.cm_ks[k],
-                    blind_request.attribute_index,
-                    &sigma,
-                )
+                .verify_pedersen_commitment(&blind_request.cm_ks[k], UNIQUE_ATTRIBUTE_INDEX, &sigma)
                 .is_err()
             {
                 errs.push(AtACTError::InvalidSignature(k));
@@ -435,7 +426,7 @@ mod test {
             .map(|_| Scalar::random(&mut rng))
             .collect();
 
-        let (pp, issuers) = setup(NUM_ISSUERS, N, T, TPRIME, &attributes).expect("setup failed");
+        let (pp, issuers) = setup(NUM_ISSUERS, N, T, TPRIME).expect("setup failed");
 
         for a in attributes {
             let (strg, cm) = register(&a, &pp).expect("register failed");
@@ -458,11 +449,6 @@ mod test {
     fn parameters_for_benches() {
         const NUM_ISSUERS: [usize; 3] = [4, 16, 64];
         const N: [usize; 3] = [30, 40, 128];
-        const NUM_ATTRIBUTES: usize = 10;
-
-        let attributes: Vec<_> = (0..NUM_ATTRIBUTES)
-            .map(|x| Scalar::from(x as u64))
-            .collect();
 
         for num_issuers in NUM_ISSUERS {
             for n in N {
@@ -470,7 +456,7 @@ mod test {
                 let tprime = n / 2 + 1;
 
                 assert!(
-                    setup(num_issuers, n, t, tprime, &attributes).is_ok(),
+                    setup(num_issuers, n, t, tprime).is_ok(),
                     "issuers {}, t {}, n {}, t' {}",
                     num_issuers,
                     t,
