@@ -156,6 +156,11 @@ pub fn microcred(
         let signatures = signatures?;
 
         let sigma_i = Signature::from_shares(&signatures[..pp.atact_pp.t], &pp.atact_pp.lagrange_t);
+        debug_assert!(pp
+            .atact_pp
+            .pk
+            .verify_pedersen_commitment(&cm_i, idx, &sigma_i)
+            .is_ok());
         sis.push(&sigma_i + &(&pp.atact_pp.pk * *prv_u.cm_k_opening.as_ref()));
     }
 
