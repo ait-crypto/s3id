@@ -1,11 +1,15 @@
-use bls12_381::Scalar;
+use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::ff::Field;
 use rand::thread_rng;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::{
     atact::{self, AtACTError, Token},
-    pedersen::{self, Commitment, MultiBasePublicParameters, Opening},
+    bls381_helpers::{hash_usize_1, hash_usize_2, pairing},
+    pedersen::{
+        self, get_g, get_ghat, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
+    },
     tsw::Signature,
 };
 
@@ -15,7 +19,7 @@ pub struct PublicParameters {
     big_l: usize,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum S3IDError {
     #[error("AtACT error: {0}")]
     AtACT(#[from] AtACTError),
@@ -23,6 +27,8 @@ pub enum S3IDError {
     Pedersen(#[from] pedersen::Error),
     #[error("Invalid attributes")]
     InvalidAttributes,
+    #[error("Invalid credential")]
+    InvalidCredential,
 }
 
 pub struct Issuer {
@@ -76,7 +82,7 @@ pub fn dedup(
     pp: &PublicParameters,
     attribute: &Scalar,
     issuers: &[Issuer],
-) -> Result<(UserPublicParameters, UserSecretKey), AtACTError> {
+) -> Result<(UserPublicParameters, UserSecretKey), S3IDError> {
     // 7.a
     let (strg, cm) = atact::register(attribute, &pp.atact_pp)?;
     let (blind_request, rand) = atact::token_request(&strg, &cm, &pp.atact_pp)?;
@@ -112,8 +118,8 @@ pub fn dedup(
 
 pub fn microcred(
     attributes: &[Scalar],
-    pp_u: UserPublicParameters,
-    prv_u: UserSecretKey,
+    pp_u: &UserPublicParameters,
+    prv_u: &UserSecretKey,
     issuers: &[Issuer],
     pp: &PublicParameters,
 ) -> Result<Vec<Signature>, S3IDError> {
@@ -135,16 +141,19 @@ pub fn microcred(
             &pp.pedersen_pp,
         );
 
-        let mut signatures = vec![];
-        for issuer in issuers {
-            pp_u.cm_k
-                .verify_proof_index_commit(&cm_i, idx, &pi_i, &pp.pedersen_pp)?;
+        let signatures: Result<Vec<_>, _> = issuers
+            .par_iter()
+            .map(|issuer| -> Result<Signature, pedersen::Error> {
+                pp_u.cm_k
+                    .verify_proof_index_commit(&cm_i, idx, &pi_i, &pp.pedersen_pp)?;
 
-            // TODO: T_Dedup chcekc
+                // TODO: T_Dedup check
 
-            let sigma_ij = issuer.sk.as_ref().sign_pedersen_commitment(&cm_i, idx);
-            signatures.push(sigma_ij);
-        }
+                Ok(issuer.sk.as_ref().sign_pedersen_commitment(&cm_i, idx))
+            })
+            .collect();
+        // FIXME
+        let signatures = signatures?;
 
         let sigma_i = Signature::from_shares(&signatures[..pp.atact_pp.t], &pp.atact_pp.lagrange_t);
         sis.push(&sigma_i + &(&pp.atact_pp.pk * *prv_u.cm_k_opening.as_ref()));
@@ -153,13 +162,21 @@ pub fn microcred(
     Ok(sis)
 }
 
+pub struct Credential {
+    zeta: Signature,
+    tau: Commitment,
+}
+
+pub type Proof = ProofMultiIndex;
+
 pub fn appcred(
     attributes: &[Scalar],
     signatures: &[Signature],
-    prv_u: UserSecretKey,
-    msg: &[u8],
+    prv_u: &UserSecretKey,
+    _msg: &[u8],
     attribute_subset: &[Scalar],
-) -> Result<(), S3IDError> {
+    pp: &PublicParameters,
+) -> Result<(Credential, ProofMultiIndex), S3IDError> {
     let q: Vec<_> = attribute_subset
         .iter()
         .map(|attribute| {
@@ -170,5 +187,88 @@ pub fn appcred(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(())
+    let (tau, tau_opening) = Commitment::multi_index_commit(
+        &prv_u.k,
+        q.iter().map(|idx| (*idx, attributes[*idx])),
+        &pp.pedersen_pp,
+    );
+    let zeta = &(q.iter().map(|idx| &signatures[*idx]).sum::<Signature>())
+        + &(&pp.atact_pp.pk * *tau_opening.as_ref());
+
+    let pi = tau.proof_multi_index_commit(
+        &prv_u.k,
+        q.iter().map(|idx| (*idx, attributes[*idx])),
+        &tau_opening,
+        &pp.pedersen_pp,
+    );
+
+    Ok((Credential { zeta, tau }, pi))
+}
+
+pub fn verifycred(
+    cred: &Credential,
+    pi: &Proof,
+    _msg: &[u8],
+    pp: &PublicParameters,
+) -> Result<(), S3IDError> {
+    cred.tau
+        .verify_proof_multi_index_commit(pi, &pp.pedersen_pp)?;
+
+    let (h_1, h_2) = pi.s_i.iter().map(|(idx, _)| *idx).fold(
+        (G1Projective::identity(), G2Projective::identity()),
+        |(h_1, h_2), idx| (h_1 + hash_usize_1(idx), h_2 + hash_usize_2(idx)),
+    );
+
+    if pairing(cred.zeta.sigma_1, get_ghat()) != pairing(h_1 + cred.tau.cm_1, pp.atact_pp.pk.pk_2)
+        || pairing(get_g(), cred.zeta.sigma_2) != pairing(pp.atact_pp.pk.pk_1, h_2 + cred.tau.cm_2)
+    {
+        Err(S3IDError::InvalidCredential)
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn basic() {
+        let num_issuers = 10;
+        let t = num_issuers / 2 + 1;
+        let n = 64;
+        let tprime = n / 2 + 1;
+        let big_l = 10;
+
+        let attribute = Scalar::random(thread_rng());
+        let attributes: Vec<_> = (0..big_l).map(|_| Scalar::random(thread_rng())).collect();
+        let attributes_subset: Vec<_> = (0..big_l)
+            .filter_map(|idx| {
+                if idx % 2 == 0 {
+                    Some(attributes[idx])
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let msg = b"some message";
+
+        let (pp, issuers) = setup(num_issuers, t, n, tprime, big_l).expect("setup failed");
+        let (pp_u, prv_u) = dedup(&pp, &attribute, &issuers).expect("dedup failed");
+
+        let signatures =
+            microcred(&attributes, &pp_u, &prv_u, &issuers, &pp).expect("microred failed");
+        let (cred, pi) = appcred(
+            &attributes,
+            &signatures,
+            &prv_u,
+            msg,
+            &attributes_subset,
+            &pp,
+        )
+        .expect("appcread failed");
+
+        assert_eq!(verifycred(&cred, &pi, msg, &pp), Ok(()));
+    }
 }

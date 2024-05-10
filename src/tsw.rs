@@ -338,6 +338,17 @@ impl Sum for Signature {
     }
 }
 
+impl<'a> Sum<&'a Signature> for Signature {
+    fn sum<I: Iterator<Item = &'a Signature>>(iter: I) -> Self {
+        let (sigma_1, sigma_2) = iter.fold(
+            (G1Projective::identity(), G2Projective::identity()),
+            |(sigma_1, sigma_2), sigma| (sigma_1 + sigma.sigma_1, sigma_2 + sigma.sigma_2),
+        );
+
+        Signature { sigma_1, sigma_2 }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

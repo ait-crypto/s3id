@@ -122,7 +122,7 @@ pub struct ProofMultiIndex {
     t_2: G2Projective,
     s_1: Scalar,
     s_2: Scalar,
-    s_i: Vec<(usize, Scalar)>,
+    pub s_i: Vec<(usize, Scalar)>,
 }
 
 #[inline]
