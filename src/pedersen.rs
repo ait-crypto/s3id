@@ -666,6 +666,17 @@ impl Sum for Commitment {
     }
 }
 
+impl<'a> Sum<&'a Commitment> for Commitment {
+    fn sum<I: Iterator<Item = &'a Commitment>>(iter: I) -> Self {
+        let (cm_1, cm_2) = iter.fold(
+            (G1Projective::identity(), G2Projective::identity()),
+            |(cm_1, cm_2), cm| (cm_1 + cm.cm_1, cm_2 + cm.cm_2),
+        );
+
+        Commitment { cm_1, cm_2 }
+    }
+}
+
 impl Mul<Scalar> for Commitment {
     type Output = Commitment;
 

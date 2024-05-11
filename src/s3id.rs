@@ -165,7 +165,7 @@ pub fn microcred(
             .verify_pedersen_commitment(&cm_i, idx, &sigma_i)
             .is_ok());
         // 10.i
-        sis.push(&sigma_i + &(&pp.atact_pp.pk * *op_i.as_ref()));
+        sis.push(&sigma_i + &(&pp.atact_pp.pk * -*op_i.as_ref()));
     }
 
     Ok(sis)
@@ -195,6 +195,7 @@ pub fn appcred(
                 .ok_or(S3IDError::InvalidAttributes)
         })
         .collect::<Result<Vec<_>, _>>()?;
+    debug_assert_eq!(q, [0, 2, 4, 6, 8]);
 
     let (tau, tau_opening) = Commitment::multi_index_commit(
         &prv_u.k,

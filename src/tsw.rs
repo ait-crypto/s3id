@@ -66,12 +66,9 @@ impl SecretKey {
     }
 
     pub fn sign_pedersen_commitment(&self, commitment: &Commitment, index: usize) -> Signature {
-        let hi_1 = hash_usize_1(index);
-        let hi_2 = hash_usize_2(index);
-
         Signature {
-            sigma_1: (commitment.cm_1 + hi_1) * self.sk,
-            sigma_2: (commitment.cm_2 + hi_2) * self.sk,
+            sigma_1: (hash_usize_1(index) + commitment.cm_1) * self.sk,
+            sigma_2: (hash_usize_2(index) + commitment.cm_2) * self.sk,
         }
     }
 }
@@ -384,6 +381,8 @@ impl<'a> Sum<&'a Signature> for Signature {
 
 #[cfg(test)]
 mod test {
+    use crate::pedersen::MultiBasePublicParameters;
+
     use super::*;
 
     #[test]
@@ -467,5 +466,45 @@ mod test {
         let pk_2 = sk_2.to_public_key();
 
         assert_eq!(pk_1.clone() + &pk_2, [pk_1, pk_2].iter().sum())
+    }
+
+    #[test]
+    fn sw_multi_index_commitment() {
+        const L: usize = 10;
+
+        let sk = SecretKey::new();
+        let pk = sk.to_public_key();
+        let pp = MultiBasePublicParameters::new(L);
+        let value_0 = Scalar::random(rand::thread_rng());
+
+        let index_attributes = [
+            (2, Scalar::random(rand::thread_rng())),
+            (5, Scalar::random(rand::thread_rng())),
+        ];
+
+        let signatures: Vec<_> = index_attributes
+            .iter()
+            .map(|(idx, attribute)| {
+                let (cm, o) = Commitment::index_commit(&value_0, *idx, attribute, &pp);
+                let sigma = sk.sign_pedersen_commitment(&cm, *idx);
+                (cm, o, sigma)
+            })
+            .collect();
+        let cm: Commitment = signatures.iter().map(|(cm, _, _)| cm).sum();
+        let sigma: Signature = signatures.iter().map(|(_, _, sigma)| sigma).sum();
+
+        let (h_1, h_2) = index_attributes.iter().map(|(idx, _)| *idx).fold(
+            (G1Projective::identity(), G2Projective::identity()),
+            |(h_1, h_2), idx| (h_1 + hash_usize_1(idx), h_2 + hash_usize_2(idx)),
+        );
+
+        assert_eq!(
+            pairing(sigma.sigma_1, get_ghat()),
+            pairing(h_1 + cm.cm_1, pk.pk_2)
+        );
+        assert_eq!(
+            pairing(get_g(), sigma.sigma_2),
+            pairing(pk.pk_1, h_2 + cm.cm_2)
+        );
     }
 }
