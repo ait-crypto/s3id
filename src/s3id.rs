@@ -129,7 +129,9 @@ pub fn microcred(
 
     let mut sis = Vec::with_capacity(attributes.len());
     for (idx, attribute) in attributes.iter().enumerate() {
+        // 10.a
         let (cm_i, op_i) = Commitment::index_commit(&prv_u.k, idx, attribute, &pp.pedersen_pp);
+        // 10.b
         let pi_i = pp_u.cm_k.proof_index_commit(
             &prv_u.k,
             &prv_u.cm_k_opening,
@@ -141,27 +143,29 @@ pub fn microcred(
             &pp.pedersen_pp,
         );
 
-        let signatures: Result<Vec<_>, _> = issuers
+        let signatures = issuers
             .par_iter()
             .map(|issuer| -> Result<Signature, pedersen::Error> {
+                // 10.f
                 pp_u.cm_k
                     .verify_proof_index_commit(&cm_i, idx, &pi_i, &pp.pedersen_pp)?;
 
                 // TODO: T_Dedup check
 
+                // 10.g
                 Ok(issuer.sk.as_ref().sign_pedersen_commitment(&cm_i, idx))
             })
-            .collect();
-        // FIXME
-        let signatures = signatures?;
-
+            .collect::<Result<Vec<_>, _>>()?;
+        // 10.h
         let sigma_i = Signature::from_shares(&signatures[..pp.atact_pp.t], &pp.atact_pp.lagrange_t);
+        // sanity check
         debug_assert!(pp
             .atact_pp
             .pk
             .verify_pedersen_commitment(&cm_i, idx, &sigma_i)
             .is_ok());
-        sis.push(&sigma_i + &(&pp.atact_pp.pk * *prv_u.cm_k_opening.as_ref()));
+        // 10.i
+        sis.push(&sigma_i + &(&pp.atact_pp.pk * *op_i.as_ref()));
     }
 
     Ok(sis)
@@ -197,8 +201,14 @@ pub fn appcred(
         q.iter().map(|idx| (*idx, attributes[*idx])),
         &pp.pedersen_pp,
     );
-    let zeta = &(q.iter().map(|idx| &signatures[*idx]).sum::<Signature>())
-        + &(&pp.atact_pp.pk * *tau_opening.as_ref());
+    let zeta = q
+        .iter()
+        .map(|idx| {
+            debug_assert!(idx % 2 == 0);
+            &signatures[*idx]
+        })
+        .sum::<Signature>()
+        + (&pp.atact_pp.pk * tau_opening.as_ref());
 
     let pi = tau.proof_multi_index_commit(
         &prv_u.k,
@@ -221,7 +231,10 @@ pub fn verifycred(
 
     let (h_1, h_2) = pi.s_i.iter().map(|(idx, _)| *idx).fold(
         (G1Projective::identity(), G2Projective::identity()),
-        |(h_1, h_2), idx| (h_1 + hash_usize_1(idx), h_2 + hash_usize_2(idx)),
+        |(h_1, h_2), idx| {
+            debug_assert!(idx % 2 == 0);
+            (h_1 + hash_usize_1(idx), h_2 + hash_usize_2(idx))
+        },
     );
 
     if pairing(cred.zeta.sigma_1, get_ghat()) != pairing(h_1 + cred.tau.cm_1, pp.atact_pp.pk.pk_2)

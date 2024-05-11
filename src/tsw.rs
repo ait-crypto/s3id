@@ -202,6 +202,28 @@ impl Mul<Scalar> for PublicKey {
     }
 }
 
+impl Mul<&Scalar> for &PublicKey {
+    type Output = PublicKey;
+
+    fn mul(self, rhs: &Scalar) -> Self::Output {
+        PublicKey {
+            pk_1: (self.pk_1 * rhs),
+            pk_2: (self.pk_2 * rhs),
+        }
+    }
+}
+
+impl Mul<&Scalar> for PublicKey {
+    type Output = PublicKey;
+
+    fn mul(self, rhs: &Scalar) -> Self::Output {
+        PublicKey {
+            pk_1: (self.pk_1 * rhs),
+            pk_2: (self.pk_2 * rhs),
+        }
+    }
+}
+
 impl Add<&PublicKey> for PublicKey {
     type Output = PublicKey;
 
@@ -276,6 +298,17 @@ impl Add<&PublicKey> for &Signature {
     type Output = Signature;
 
     fn add(self, rhs: &PublicKey) -> Self::Output {
+        Signature {
+            sigma_1: self.sigma_1 + rhs.pk_1,
+            sigma_2: self.sigma_2 + rhs.pk_2,
+        }
+    }
+}
+
+impl Add<PublicKey> for Signature {
+    type Output = Signature;
+
+    fn add(self, rhs: PublicKey) -> Self::Output {
         Signature {
             sigma_1: self.sigma_1 + rhs.pk_1,
             sigma_2: self.sigma_2 + rhs.pk_2,
