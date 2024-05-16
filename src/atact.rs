@@ -1,5 +1,6 @@
 use bls12_381::Scalar;
 use group::ff::Field;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use thiserror::Error;
 
@@ -249,6 +250,7 @@ pub fn aggregate_unblind(
     debug_assert_eq!(rand.r_ks.len(), pp.n);
 
     let sks: Vec<_> = (0..pp.n)
+        .into_par_iter()
         .map(|k| {
             let sigs: Vec<_> = blind_tokens
                 .iter()

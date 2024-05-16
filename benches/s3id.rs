@@ -32,7 +32,7 @@ fn bench_s3id(
 
     let msg = b"some message";
 
-    let (pp, issuers) = setup(num_issuers, n, t, tprime, big_l).expect("setup failed");
+    let (pp, issuers) = setup(num_issuers, t, n, tprime, big_l).expect("setup failed");
     c.bench_function("dedup", |b| {
         b.iter(|| {
             #[allow(unused_must_use)]

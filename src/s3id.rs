@@ -1,7 +1,7 @@
 use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::ff::Field;
 use rand::thread_rng;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use thiserror::Error;
 
 use crate::{
@@ -33,7 +33,10 @@ pub enum S3IDError {
 
 pub struct Issuer {
     sk: atact::Issuer,
-    _t_dedup: Vec<usize>, // FIXME
+    // FIXME: The use of T_dedup to check for duplicate tokens is not
+    // implemented. Checking it would make benchmarking harder. Performance-wise
+    // it makes not significant difference.
+    _t_dedup: Vec<()>,
 }
 
 impl From<atact::Issuer> for Issuer {
@@ -87,11 +90,10 @@ pub fn dedup(
     let (blind_request, rand) = atact::token_request(&strg, &cm, &pp.atact_pp)?;
 
     // 7.b
-    let mut blind_tokens = Vec::with_capacity(issuers.len());
-    for issuer in issuers {
-        let token = atact::tissue(&blind_request, &issuer.sk, &pp.atact_pp)?;
-        blind_tokens.push(token);
-    }
+    let blind_tokens = issuers
+        .par_iter()
+        .map(|issuer| atact::tissue(&blind_request, &issuer.sk, &pp.atact_pp))
+        .collect::<Result<Vec<_>, _>>()?;
 
     // 7.c
     let token = atact::aggregate_unblind(&blind_tokens, &rand, &pp.atact_pp);
@@ -128,48 +130,51 @@ pub fn microcred(
         return Err(S3IDError::InvalidAttributes);
     }
 
-    let mut sis = Vec::with_capacity(attributes.len());
-    for (idx, attribute) in attributes.iter().enumerate() {
-        // 10.a
-        let (cm_i, op_i) = Commitment::index_commit(&prv_u.k, idx, attribute, &pp.pedersen_pp);
-        // 10.b
-        let pi_i = pp_u.cm_k.proof_index_commit(
-            &prv_u.k,
-            &prv_u.cm_k_opening,
-            &cm_i,
-            &prv_u.k,
-            idx,
-            attribute,
-            &op_i,
-            &pp.pedersen_pp,
-        );
+    attributes
+        .iter()
+        .enumerate()
+        .par_bridge()
+        .map(|(idx, attribute)| -> Result<Signature, S3IDError> {
+            // 10.a
+            let (cm_i, op_i) = Commitment::index_commit(&prv_u.k, idx, attribute, &pp.pedersen_pp);
+            // 10.b
+            let pi_i = pp_u.cm_k.proof_index_commit(
+                &prv_u.k,
+                &prv_u.cm_k_opening,
+                &cm_i,
+                &prv_u.k,
+                idx,
+                attribute,
+                &op_i,
+                &pp.pedersen_pp,
+            );
 
-        let signatures = issuers
-            .par_iter()
-            .map(|issuer| -> Result<Signature, pedersen::Error> {
-                // 10.f
-                pp_u.cm_k
-                    .verify_proof_index_commit(&cm_i, idx, &pi_i, &pp.pedersen_pp)?;
+            let signatures = issuers
+                .par_iter()
+                .map(|issuer| -> Result<Signature, pedersen::Error> {
+                    // 10.f
+                    pp_u.cm_k
+                        .verify_proof_index_commit(&cm_i, idx, &pi_i, &pp.pedersen_pp)?;
 
-                // TODO: T_Dedup check
+                    // TODO: T_Dedup check
 
-                // 10.g
-                Ok(issuer.sk.as_ref().sign_pedersen_commitment(&cm_i, idx))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        // 10.h
-        let sigma_i = Signature::from_shares(&signatures[..pp.atact_pp.t], &pp.atact_pp.lagrange_t);
-        // sanity check
-        debug_assert!(pp
-            .atact_pp
-            .pk
-            .verify_pedersen_commitment(&cm_i, idx, &sigma_i)
-            .is_ok());
-        // 10.i
-        sis.push(&sigma_i + &(&pp.atact_pp.pk * -*op_i.as_ref()));
-    }
-
-    Ok(sis)
+                    // 10.g
+                    Ok(issuer.sk.as_ref().sign_pedersen_commitment(&cm_i, idx))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            // 10.h
+            let sigma_i =
+                Signature::from_shares(&signatures[..pp.atact_pp.t], &pp.atact_pp.lagrange_t);
+            // sanity check
+            debug_assert!(pp
+                .atact_pp
+                .pk
+                .verify_pedersen_commitment(&cm_i, idx, &sigma_i)
+                .is_ok());
+            // 10.i
+            Ok(&sigma_i + &(&pp.atact_pp.pk * -*op_i.as_ref()))
+        })
+        .collect::<Result<Vec<_>, _>>()
 }
 
 pub struct Credential {
