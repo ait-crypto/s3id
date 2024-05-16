@@ -33,14 +33,14 @@ pub enum S3IDError {
 
 pub struct Issuer {
     sk: atact::Issuer,
-    t_dedup: Vec<usize>, // FIXME
+    _t_dedup: Vec<usize>, // FIXME
 }
 
 impl From<atact::Issuer> for Issuer {
     fn from(value: atact::Issuer) -> Self {
         Self {
             sk: value,
-            t_dedup: Vec::new(),
+            _t_dedup: Default::default(),
         }
     }
 }
@@ -66,13 +66,12 @@ pub fn setup(
 }
 
 pub struct UserPublicParameters {
-    token: Token,
+    _token: Token,
     cm_k: Commitment,
     // idx
 }
 
 pub struct UserSecretKey {
-    attribute: Scalar,
     k: Scalar,
     // TODO: fix in paper
     cm_k_opening: Opening,
@@ -107,9 +106,11 @@ pub fn dedup(
     // todo: check token in T_Dedup
 
     Ok((
-        UserPublicParameters { token, cm_k },
+        UserPublicParameters {
+            _token: token,
+            cm_k,
+        },
         UserSecretKey {
-            attribute: *attribute,
             k: bold_k,
             cm_k_opening,
         },
@@ -202,13 +203,7 @@ pub fn appcred(
         q.iter().map(|idx| (*idx, attributes[*idx])),
         &pp.pedersen_pp,
     );
-    let zeta = q
-        .iter()
-        .map(|idx| {
-            debug_assert!(idx % 2 == 0);
-            &signatures[*idx]
-        })
-        .sum::<Signature>()
+    let zeta = q.iter().map(|idx| &signatures[*idx]).sum::<Signature>()
         + (&pp.atact_pp.pk * tau_opening.as_ref());
 
     let pi = tau.proof_multi_index_commit(
@@ -230,16 +225,16 @@ pub fn verifycred(
     cred.tau
         .verify_proof_multi_index_commit(pi, &pp.pedersen_pp)?;
 
-    let (h_1, h_2) = pi.s_i.iter().map(|(idx, _)| *idx).fold(
+    let (h_1, h_2) = pi.s_i.iter().fold(
         (G1Projective::identity(), G2Projective::identity()),
-        |(h_1, h_2), idx| {
-            debug_assert!(idx % 2 == 0);
-            (h_1 + hash_usize_1(idx), h_2 + hash_usize_2(idx))
-        },
+        |(h_1, h_2), (idx, _)| (h_1 + hash_usize_1(*idx), h_2 + hash_usize_2(*idx)),
     );
 
-    if pairing(cred.zeta.sigma_1, get_ghat()) != pairing(h_1 + cred.tau.cm_1, pp.atact_pp.pk.pk_2)
-        || pairing(get_g(), cred.zeta.sigma_2) != pairing(pp.atact_pp.pk.pk_1, h_2 + cred.tau.cm_2)
+    let pk = &pp.atact_pp.pk;
+    let zeta = &cred.zeta;
+    let tau = &cred.tau;
+    if pairing(zeta.sigma_1, get_ghat()) != pairing(h_1 + tau.cm_1, pk.pk_2)
+        || pairing(get_g(), zeta.sigma_2) != pairing(pk.pk_1, h_2 + tau.cm_2)
     {
         Err(S3IDError::InvalidCredential)
     } else {
@@ -286,7 +281,7 @@ mod test {
             &attributes_subset,
             &pp,
         )
-        .expect("appcread failed");
+        .expect("appcred failed");
 
         assert_eq!(verifycred(&cred, &pi, msg, &pp), Ok(()));
     }

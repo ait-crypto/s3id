@@ -24,6 +24,10 @@ subtle = "2"
 name = "atact"
 harness = false
 
+[[bench]]
+name = "s3id"
+harness = false
+
 [profile.bench]
 lto = true
 opt-level = 3
