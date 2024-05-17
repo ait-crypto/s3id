@@ -116,16 +116,6 @@ where
 
     pub fn eval_j_0(&self, j: usize) -> T {
         self.evaluated_ell_j_0[j]
-
-        // ell_j_0(self.xs.as_ref(), j)
-
-        /*
-        *self
-            .evaluated_ell_j_0
-            .borrow_mut()
-            .entry(j)
-            .or_insert_with(|| ell_j_0(self.xs.as_ref(), j))
-            */
     }
 
     pub fn update_point(&mut self, k: usize, new_value: T) {
@@ -394,7 +384,7 @@ mod test {
         // check polynomial x^2
 
         let xs = [SmallScalar(1), SmallScalar(2), SmallScalar(3)];
-        let ys = [SmallScalar(1), SmallScalar(4), SmallScalar(9)];
+        let ys = [xs[0] * xs[0], xs[1] * xs[1], xs[2] * xs[2]];
 
         let lagrange = GenericLagrange::new(&xs);
         assert_eq!(lagrange.eval(SmallScalar(4), &ys), SmallScalar(16));
@@ -405,7 +395,14 @@ mod test {
             lagrange.eval(new_xs[1], &ys),
             lagrange.eval(new_xs[2], &ys),
         ];
-        assert_eq!(new_ys, [SmallScalar(16), SmallScalar(13), SmallScalar(15)]);
+        assert_eq!(
+            new_ys,
+            [
+                new_xs[0] * new_xs[0],
+                new_xs[1] * new_xs[1],
+                new_xs[2] * new_xs[2]
+            ]
+        );
 
         let lagrange = GenericLagrange::new(&new_xs);
         let check_ys = [
