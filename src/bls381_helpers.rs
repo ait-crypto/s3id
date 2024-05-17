@@ -93,25 +93,27 @@ impl ByteConverter<192> for G2Projective {
 }
 
 #[inline]
-pub fn hash_with_domain_separation_1(msg: &[u8], domain_separator: &[u8]) -> G1Projective {
+fn hash_with_domain_separation_1(msg: &[u8], domain_separator: &[u8]) -> G1Projective {
     <G1Projective as HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(msg, domain_separator)
 }
 
 #[inline]
-pub fn hash_with_domain_separation_2(msg: &[u8], domain_separator: &[u8]) -> G2Projective {
+fn hash_with_domain_separation_2(msg: &[u8], domain_separator: &[u8]) -> G2Projective {
     <G2Projective as HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(msg, domain_separator)
 }
 
 #[inline]
-pub fn hash_usize_1(size: usize) -> G1Projective {
-    let bytes = (size as u64).to_le_bytes();
-    hash_with_domain_separation_1(&bytes, b"hash-usize")
+pub fn hash_with_domain_separation(msg: &[u8], domain_separator: &[u8]) -> G1G2 {
+    G1G2(
+        hash_with_domain_separation_1(msg, domain_separator),
+        hash_with_domain_separation_2(msg, domain_separator),
+    )
 }
 
 #[inline]
-pub fn hash_usize_2(size: usize) -> G2Projective {
+pub fn hash_usize(size: usize) -> G1G2 {
     let bytes = (size as u64).to_le_bytes();
-    hash_with_domain_separation_2(&bytes, b"hash-usize")
+    hash_with_domain_separation(&bytes, b"hash-usize")
 }
 
 #[inline]
@@ -142,11 +144,20 @@ impl Add<&G1G2> for G1G2 {
     }
 }
 
-impl Add<&G1G2> for &G1G2 {
+impl Add for &G1G2 {
     type Output = G1G2;
 
     fn add(self, rhs: &G1G2) -> Self::Output {
         G1G2(self.0 + rhs.0, self.1 + rhs.1)
+    }
+}
+
+impl Add<G1G2> for &G1G2 {
+    type Output = G1G2;
+
+    #[inline(always)]
+    fn add(self, rhs: G1G2) -> Self::Output {
+        rhs + self
     }
 }
 

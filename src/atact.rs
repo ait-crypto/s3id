@@ -298,8 +298,8 @@ pub fn prove(token: &Token, rand: &Rand, pp: &PublicParameters) -> TokenProof {
         &bold_cm,
         &rand.bold_k,
         &bold_o,
-        (&pp.pk.0 .0, &pp.pk.0 .1),
-        (&pk_prime.0 .0, &pk_prime.0 .1),
+        &pp.pk.0,
+        &pk_prime.0,
     );
 
     TokenProof {
@@ -326,10 +326,8 @@ pub fn verify(
         .cm
         .verify_proof_2_pk(
             &blind_request.bold_cm_k,
-            &pp.pk.0 .0,
-            &pp.pk.0 .1,
-            &token_proof.pk_prime.0 .0,
-            &token_proof.pk_prime.0 .1,
+            &pp.pk.0,
+            &token_proof.pk_prime.0,
             &token_proof.pi_zk,
         )
         .is_err()

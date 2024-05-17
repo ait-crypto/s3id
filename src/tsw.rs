@@ -10,7 +10,7 @@ use rand::thread_rng;
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{hash_usize_1, hash_usize_2, pairing, G1G2},
+    bls381_helpers::{hash_usize, pairing, G1G2},
     lagrange::Lagrange,
     pedersen::{get_parameters, Commitment},
 };
@@ -67,14 +67,11 @@ impl SecretKey {
 
     pub fn to_public_key(&self) -> PublicKey {
         let pp = get_parameters();
-        PublicKey(G1G2(pp.g * self.sk, pp.ghat * self.sk))
+        PublicKey(&pp.g * self.sk)
     }
 
     pub fn sign_pedersen_commitment(&self, commitment: &Commitment, index: usize) -> Signature {
-        Signature(G1G2(
-            (hash_usize_1(index) + commitment.cm_1) * self.sk,
-            (hash_usize_2(index) + commitment.cm_2) * self.sk,
-        ))
+        Signature((hash_usize(index) + &commitment.0) * self.sk)
     }
 }
 
@@ -103,16 +100,16 @@ impl PublicKey {
     ) -> Result<(), Error> {
         let pp = get_parameters();
 
-        let hi_1 = hash_usize_1(index);
-        let lhs = pairing(hi_1 + commitment.cm_1, &self.0);
-        let rhs = pairing(&signature.0, pp.ghat);
+        let hi = hash_usize(index);
+        let check = hi + &commitment.0;
+        let lhs = pairing(&check, &self.0);
+        let rhs = pairing(&signature.0, &pp.g);
         if lhs != rhs {
             return Err(Error::new());
         }
 
-        let hi_2 = hash_usize_2(index);
-        let lhs = pairing(&self.0, hi_2 + commitment.cm_2);
-        let rhs = pairing(pp.g, &signature.0);
+        let lhs = pairing(&self.0, &check);
+        let rhs = pairing(&pp.g, &signature.0);
         match lhs == rhs {
             true => Ok(()),
             false => Err(Error::new()),
@@ -136,7 +133,7 @@ impl Signature {
 impl PublicKey {
     pub fn is_valid(&self) -> bool {
         let pp = get_parameters();
-        pairing(&self.0, pp.ghat) == pairing(pp.g, &self.0)
+        pairing(&self.0, &pp.g) == pairing(&pp.g, &self.0)
     }
 }
 
@@ -204,12 +201,14 @@ impl Sub<&PublicKey> for &PublicKey {
 }
 
 impl<'a> Sum<&'a PublicKey> for PublicKey {
+    #[inline]
     fn sum<I: Iterator<Item = &'a PublicKey>>(iter: I) -> Self {
         PublicKey(iter.map(|v| &v.0).sum())
     }
 }
 
 impl Sum<PublicKey> for PublicKey {
+    #[inline]
     fn sum<I: Iterator<Item = PublicKey>>(iter: I) -> Self {
         PublicKey(iter.map(|v| v.0).sum())
     }
@@ -280,12 +279,14 @@ impl Mul<&Scalar> for &Signature {
 }
 
 impl Sum for Signature {
+    #[inline]
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         Self(iter.map(|v| v.0).sum())
     }
 }
 
 impl<'a> Sum<&'a Signature> for Signature {
+    #[inline]
     fn sum<I: Iterator<Item = &'a Signature>>(iter: I) -> Self {
         Self(iter.map(|v| &v.0).sum())
     }
@@ -293,8 +294,6 @@ impl<'a> Sum<&'a Signature> for Signature {
 
 #[cfg(test)]
 mod test {
-    use bls12_381::{G1Projective, G2Projective};
-
     use crate::pedersen::MultiBasePublicParameters;
 
     use super::*;
@@ -402,12 +401,13 @@ mod test {
         let cm: Commitment = signatures.iter().map(|(cm, _, _)| cm).sum();
         let sigma: Signature = signatures.iter().map(|(_, _, sigma)| sigma).sum();
 
-        let (h_1, h_2) = index_attributes.iter().map(|(idx, _)| *idx).fold(
-            (G1Projective::identity(), G2Projective::identity()),
-            |(h_1, h_2), idx| (h_1 + hash_usize_1(idx), h_2 + hash_usize_2(idx)),
-        );
+        let h = index_attributes
+            .iter()
+            .map(|(idx, _)| *idx)
+            .fold(G1G2::default(), |h, idx| h + hash_usize(idx));
 
-        assert_eq!(pairing(&sigma.0, pp.ghat), pairing(h_1 + cm.cm_1, &pk.0));
-        assert_eq!(pairing(pp.g, &sigma.0), pairing(&pk.0, h_2 + cm.cm_2));
+        let check = h + cm.0;
+        assert_eq!(pairing(&sigma.0, &pp.g), pairing(&check, &pk.0));
+        assert_eq!(pairing(&pp.g, &sigma.0), pairing(&pk.0, &check));
     }
 }

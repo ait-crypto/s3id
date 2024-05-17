@@ -1,4 +1,4 @@
-use bls12_381::{G1Projective, G2Projective, Scalar};
+use bls12_381::Scalar;
 use group::ff::Field;
 use rand::thread_rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     atact::{self, AtACTError, Token},
-    bls381_helpers::{hash_usize_1, hash_usize_2, pairing},
+    bls381_helpers::{hash_usize, pairing, G1G2},
     pedersen::{
         self, get_parameters, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
     },
@@ -230,18 +230,15 @@ pub fn verifycred(
     cred.tau
         .verify_proof_multi_index_commit(pi, &pp.pedersen_pp)?;
 
-    let (h_1, h_2) = pi.s_i.iter().fold(
-        (G1Projective::identity(), G2Projective::identity()),
-        |(h_1, h_2), (idx, _)| (h_1 + hash_usize_1(*idx), h_2 + hash_usize_2(*idx)),
-    );
-
+    let h: G1G2 = pi.s_i.iter().map(|(idx, _)| hash_usize(*idx)).sum();
     let pk = &pp.atact_pp.pk;
     let zeta = &cred.zeta;
     let tau = &cred.tau;
     let pp = get_parameters();
+    let check = h + &tau.0;
 
-    if pairing(&zeta.0, pp.ghat) != pairing(h_1 + tau.cm_1, &pk.0)
-        || pairing(pp.g, &zeta.0) != pairing(&pk.0, h_2 + tau.cm_2)
+    if pairing(&zeta.0, &pp.g) != pairing(&check, &pk.0)
+        || pairing(&pp.g, &zeta.0) != pairing(&pk.0, &check)
     {
         Err(S3IDError::InvalidCredential)
     } else {
