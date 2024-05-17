@@ -45,10 +45,9 @@ impl SecretKey {
         let mut rng = thread_rng();
         let mut sks: Vec<_> = (0..t - 1).map(|_| Scalar::random(&mut rng)).collect();
 
-        let mut base_points: Vec<_> = (1..=t - 1).map(|i| Scalar::from(i as u64)).collect();
-        base_points.push(Scalar::from(t as u64));
-
-        for _ in (t - 1)..num_shares {
+        let mut base_points: Vec<_> = (1..=t).map(|i| Scalar::from(i as u64)).collect();
+        for k in t..=num_shares {
+            base_points[t - 1] = Scalar::from(k as u64);
             let lagrange = Lagrange::new(&base_points);
 
             let base = self.sk
@@ -60,7 +59,6 @@ impl SecretKey {
                     .sum::<Scalar>();
 
             sks.push(base * lagrange.eval_j_0(t - 1).invert().unwrap());
-            base_points[t - 1] += Scalar::ONE;
         }
         sks.into_iter().map(|sk| SecretKey { sk }).collect()
     }
