@@ -38,7 +38,9 @@ pub struct SecretKey {
 #[allow(clippy::new_without_default)]
 impl SecretKey {
     pub fn new() -> Self {
-        Self::new_from_rng(thread_rng())
+        Self {
+            sk: Scalar::random(thread_rng()),
+        }
     }
 
     pub fn into_shares(&self, num_shares: usize, t: usize) -> Vec<SecretKey> {
@@ -61,12 +63,6 @@ impl SecretKey {
             sks.push(base * lagrange.eval_j_0(t - 1).invert().unwrap());
         }
         sks.into_iter().map(|sk| SecretKey { sk }).collect()
-    }
-
-    pub fn new_from_rng(rng: impl RngCore) -> Self {
-        Self {
-            sk: Scalar::random(rng),
-        }
     }
 
     pub fn to_public_key(&self) -> PublicKey {
