@@ -240,8 +240,8 @@ pub fn verifycred(
     let tau = &cred.tau;
     let pp = get_parameters();
 
-    if pairing(zeta.sigma_1, pp.ghat) != pairing(h_1 + tau.cm_1, pk.pk_2)
-        || pairing(pp.g, zeta.sigma_2) != pairing(pk.pk_1, h_2 + tau.cm_2)
+    if pairing(&zeta.0, pp.ghat) != pairing(h_1 + tau.cm_1, &pk.0)
+        || pairing(pp.g, &zeta.0) != pairing(&pk.0, h_2 + tau.cm_2)
     {
         Err(S3IDError::InvalidCredential)
     } else {

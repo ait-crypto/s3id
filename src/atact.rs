@@ -217,8 +217,8 @@ pub struct Token {
 impl Token {
     pub fn hash_prime(&self, pp: &PublicParameters) -> Vec<usize> {
         let mut hasher = sha3::Shake256::default();
-        hasher.update(&self.s.sigma_1.as_serde_bytes());
-        hasher.update(&self.s.sigma_2.as_serde_bytes());
+        hasher.update(&self.s.0 .0.as_serde_bytes());
+        hasher.update(&self.s.0 .1.as_serde_bytes());
         let mut reader = hasher.finalize_xof();
         debug_assert!(pp.n < 256);
 
@@ -298,8 +298,8 @@ pub fn prove(token: &Token, rand: &Rand, pp: &PublicParameters) -> TokenProof {
         &bold_cm,
         &rand.bold_k,
         &bold_o,
-        (&pp.pk.pk_1, &pp.pk.pk_2),
-        (&pk_prime.pk_1, &pk_prime.pk_2),
+        (&pp.pk.0 .0, &pp.pk.0 .1),
+        (&pk_prime.0 .0, &pk_prime.0 .1),
     );
 
     TokenProof {
@@ -326,10 +326,10 @@ pub fn verify(
         .cm
         .verify_proof_2_pk(
             &blind_request.bold_cm_k,
-            &pp.pk.pk_1,
-            &pp.pk.pk_2,
-            &token_proof.pk_prime.pk_1,
-            &token_proof.pk_prime.pk_2,
+            &pp.pk.0 .0,
+            &pp.pk.0 .1,
+            &token_proof.pk_prime.0 .0,
+            &token_proof.pk_prime.0 .1,
             &token_proof.pi_zk,
         )
         .is_err()
@@ -340,10 +340,10 @@ pub fn verify(
     let sk_prod: Signature = (0..pp.tprime)
         .map(|k| &token_proof.ss[k] * pp.lagrange_tprime.eval_j_0(k))
         .sum();
-    if pairing(token.s.sigma_1, token_proof.pk_prime.pk_2) != pairing(sk_prod.sigma_1, pp.pk.pk_2) {
+    if pairing(&token.s.0, &token_proof.pk_prime.0) != pairing(&sk_prod.0, &pp.pk.0) {
         errs.push(AtACTError::InvalidToken);
     }
-    if pairing(token_proof.pk_prime.pk_1, token.s.sigma_2) != pairing(pp.pk.pk_1, sk_prod.sigma_2) {
+    if pairing(&token_proof.pk_prime.0, &token.s.0) != pairing(&pp.pk.0, &sk_prod.0) {
         errs.push(AtACTError::InvalidToken);
     }
 

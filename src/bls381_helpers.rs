@@ -1,3 +1,8 @@
+use std::{
+    iter::Sum,
+    ops::{Add, Mul, Sub},
+};
+
 use bls12_381::{
     hash_to_curve::{ExpandMsgXmd, HashToCurve},
     G1Affine, G1Projective, G2Affine, G2Projective, Scalar,
@@ -116,4 +121,131 @@ where
     G2: Into<G2Affine>,
 {
     bls12_381::pairing(&g.into(), &h.into())
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct G1G2(pub G1Projective, pub G2Projective);
+
+impl Add for G1G2 {
+    type Output = G1G2;
+
+    fn add(self, rhs: G1G2) -> Self::Output {
+        G1G2(self.0 + rhs.0, self.1 + rhs.1)
+    }
+}
+
+impl Add<&G1G2> for G1G2 {
+    type Output = G1G2;
+
+    fn add(self, rhs: &G1G2) -> Self::Output {
+        G1G2(self.0 + rhs.0, self.1 + rhs.1)
+    }
+}
+
+impl Add<&G1G2> for &G1G2 {
+    type Output = G1G2;
+
+    fn add(self, rhs: &G1G2) -> Self::Output {
+        G1G2(self.0 + rhs.0, self.1 + rhs.1)
+    }
+}
+
+impl Sub for G1G2 {
+    type Output = G1G2;
+
+    fn sub(self, rhs: G1G2) -> Self::Output {
+        G1G2(self.0 - rhs.0, self.1 - rhs.1)
+    }
+}
+
+impl Sub<&G1G2> for G1G2 {
+    type Output = G1G2;
+
+    fn sub(self, rhs: &G1G2) -> Self::Output {
+        G1G2(self.0 - rhs.0, self.1 - rhs.1)
+    }
+}
+
+impl Sub<&G1G2> for &G1G2 {
+    type Output = G1G2;
+
+    fn sub(self, rhs: &G1G2) -> Self::Output {
+        G1G2(self.0 - rhs.0, self.1 - rhs.1)
+    }
+}
+
+impl<'a> Sum<&'a G1G2> for G1G2 {
+    fn sum<I: Iterator<Item = &'a G1G2>>(iter: I) -> Self {
+        let (g_1, g_2) = iter.fold(
+            (G1Projective::identity(), G2Projective::identity()),
+            |(acc_1, acc_2), g1g2| (acc_1 + g1g2.0, acc_2 + g1g2.1),
+        );
+        G1G2(g_1, g_2)
+    }
+}
+
+impl Sum<G1G2> for G1G2 {
+    fn sum<I: Iterator<Item = G1G2>>(iter: I) -> Self {
+        let (g_1, g_2) = iter.fold(
+            (G1Projective::identity(), G2Projective::identity()),
+            |(acc_1, acc_2), g1g2| (acc_1 + g1g2.0, acc_2 + g1g2.1),
+        );
+        G1G2(g_1, g_2)
+    }
+}
+
+impl Mul<Scalar> for G1G2 {
+    type Output = G1G2;
+
+    fn mul(self, rhs: Scalar) -> Self::Output {
+        G1G2(self.0 * rhs, self.1 * rhs)
+    }
+}
+
+impl Mul<&Scalar> for G1G2 {
+    type Output = G1G2;
+
+    fn mul(self, rhs: &Scalar) -> Self::Output {
+        G1G2(self.0 * rhs, self.1 * rhs)
+    }
+}
+
+impl Mul<Scalar> for &G1G2 {
+    type Output = G1G2;
+
+    fn mul(self, rhs: Scalar) -> Self::Output {
+        G1G2(self.0 * rhs, self.1 * rhs)
+    }
+}
+
+impl Mul<&Scalar> for &G1G2 {
+    type Output = G1G2;
+
+    fn mul(self, rhs: &Scalar) -> Self::Output {
+        G1G2(self.0 * rhs, self.1 * rhs)
+    }
+}
+
+impl From<G1G2> for G1Affine {
+    fn from(value: G1G2) -> Self {
+        value.0.into()
+    }
+}
+
+impl From<&G1G2> for G1Affine {
+    fn from(value: &G1G2) -> Self {
+        value.0.into()
+    }
+}
+
+impl From<G1G2> for G2Affine {
+    fn from(value: G1G2) -> Self {
+        value.1.into()
+    }
+}
+
+impl From<&G1G2> for G2Affine {
+    fn from(value: &G1G2) -> Self {
+        value.1.into()
+    }
 }
