@@ -68,8 +68,8 @@ impl SecretKey {
     pub fn to_public_key(&self) -> PublicKey {
         let pp = get_parameters();
         PublicKey {
-            pk_1: (pp.g * self.sk),
-            pk_2: (pp.ghat * self.sk),
+            pk_1: pp.g * self.sk,
+            pk_2: pp.ghat * self.sk,
         }
     }
 
@@ -142,16 +142,6 @@ impl Signature {
     }
 }
 
-impl<'a> FromIterator<&'a Signature> for Signature {
-    fn from_iter<T: IntoIterator<Item = &'a Signature>>(iter: T) -> Self {
-        let (sigma_1, sigma_2) = iter.into_iter().fold(
-            (G1Projective::identity(), G2Projective::identity()),
-            |(acc_1, acc_2), sigma| (acc_1 + sigma.sigma_1, acc_2 + sigma.sigma_2),
-        );
-        Signature { sigma_1, sigma_2 }
-    }
-}
-
 impl PublicKey {
     pub fn is_valid(&self) -> bool {
         let pp = get_parameters();
@@ -164,8 +154,8 @@ impl Mul<Scalar> for &PublicKey {
 
     fn mul(self, rhs: Scalar) -> Self::Output {
         PublicKey {
-            pk_1: (self.pk_1 * rhs),
-            pk_2: (self.pk_2 * rhs),
+            pk_1: self.pk_1 * rhs,
+            pk_2: self.pk_2 * rhs,
         }
     }
 }
@@ -175,8 +165,8 @@ impl Mul<Scalar> for PublicKey {
 
     fn mul(self, rhs: Scalar) -> Self::Output {
         PublicKey {
-            pk_1: (self.pk_1 * rhs),
-            pk_2: (self.pk_2 * rhs),
+            pk_1: self.pk_1 * rhs,
+            pk_2: self.pk_2 * rhs,
         }
     }
 }
@@ -186,8 +176,8 @@ impl Mul<&Scalar> for &PublicKey {
 
     fn mul(self, rhs: &Scalar) -> Self::Output {
         PublicKey {
-            pk_1: (self.pk_1 * rhs),
-            pk_2: (self.pk_2 * rhs),
+            pk_1: self.pk_1 * rhs,
+            pk_2: self.pk_2 * rhs,
         }
     }
 }
@@ -197,8 +187,8 @@ impl Mul<&Scalar> for PublicKey {
 
     fn mul(self, rhs: &Scalar) -> Self::Output {
         PublicKey {
-            pk_1: (self.pk_1 * rhs),
-            pk_2: (self.pk_2 * rhs),
+            pk_1: self.pk_1 * rhs,
+            pk_2: self.pk_2 * rhs,
         }
     }
 }
