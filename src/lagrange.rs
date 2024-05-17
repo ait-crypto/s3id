@@ -66,16 +66,6 @@ where
         }
     }
 
-    #[deprecated]
-    pub fn new_with_base_points(n: usize) -> Self {
-        Self::new(
-            (0..n)
-                .map(|i| T::from((i + 1) as u64))
-                .collect::<Vec<_>>()
-                .as_ref(),
-        )
-    }
-
     pub fn eval_j(&self, x: T, j: usize) -> T {
         ell_j(x, self.xs.as_ref(), j)
     }
