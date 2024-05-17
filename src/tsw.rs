@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     iter::Sum,
     ops::{Add, Mul, Sub},
 };
@@ -7,12 +8,28 @@ use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::ff::Field;
 use rand::{thread_rng, RngCore};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::{
     bls381_helpers::{self, hash_usize_1, hash_usize_2, pairing},
     lagrange::Lagrange,
     pedersen::{get_parameters, Commitment},
 };
+
+#[derive(Error, Debug)]
+pub struct Error;
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "verification error")
+    }
+}
+
+impl Error {
+    fn new() -> Self {
+        Self {}
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretKey {
@@ -99,14 +116,14 @@ impl PublicKey {
         commitment: &Commitment,
         index: usize,
         signature: &Signature,
-    ) -> Result<(), signature::Error> {
+    ) -> Result<(), Error> {
         let pp = get_parameters();
 
         let hi_1 = hash_usize_1(index);
         let lhs = pairing(hi_1 + commitment.cm_1, self.pk_2);
         let rhs = pairing(signature.sigma_1, pp.ghat);
         if lhs != rhs {
-            return Err(signature::Error::new());
+            return Err(Error::new());
         }
 
         let hi_2 = hash_usize_2(index);
@@ -114,7 +131,7 @@ impl PublicKey {
         let rhs = pairing(pp.g, signature.sigma_2);
         match lhs == rhs {
             true => Ok(()),
-            false => Err(signature::Error::new()),
+            false => Err(Error::new()),
         }
     }
 }
