@@ -43,11 +43,13 @@ pub struct MultiBasePublicParameters(Vec<G1G2>);
 
 impl MultiBasePublicParameters {
     pub fn new(l: usize) -> Self {
-        let us = (0..l).map(|idx| {
-            hash_with_domain_separation(&(idx as u64).to_le_bytes(), b"Multi-Pedersen-PP")
-        });
-
-        Self(us.collect())
+        Self(
+            (0..l)
+                .map(|idx| {
+                    hash_with_domain_separation(&(idx as u64).to_le_bytes(), b"Multi-Pedersen-PP")
+                })
+                .collect(),
+        )
     }
 }
 
@@ -327,9 +329,10 @@ impl Commitment {
         debug_assert!(idx < multi_pp.0.len());
 
         let pp = get_parameters();
-        match self.0 == &pp.g * opening.r + &pp.u * value_0 + &multi_pp[idx] * value_i {
-            true => Ok(()),
-            _ => Err(Error::InvalidOpening),
+        if self.0 == &pp.g * opening.r + &pp.u * value_0 + &multi_pp[idx] * value_i {
+            Ok(())
+        } else {
+            Err(Error::InvalidOpening)
         }
     }
 
@@ -447,9 +450,10 @@ impl Commitment {
             cm + &multi_pp[idx] * value_i
         });
 
-        match self.0 == cm {
-            true => Ok(()),
-            _ => Err(Error::InvalidOpening),
+        if self.0 == cm {
+            Ok(())
+        } else {
+            Err(Error::InvalidOpening)
         }
     }
 

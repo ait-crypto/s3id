@@ -64,7 +64,7 @@ pub fn setup(
             pedersen_pp,
             big_l,
         },
-        issuers.into_iter().map(|issuer| issuer.into()).collect(),
+        issuers.into_iter().map(Into::into).collect(),
     ))
 }
 
@@ -151,7 +151,7 @@ pub fn microcred(
 
             let signatures = issuers
                 .par_iter()
-                .map(|issuer| -> Result<Signature, pedersen::Error> {
+                .map(|issuer| -> Result<Signature, S3IDError> {
                     // 10.f
                     pp_u.cm_k
                         .verify_proof_index_commit(&cm_i, idx, &pi_i, &pp.pedersen_pp)?;
@@ -201,7 +201,6 @@ pub fn appcred(
                 .ok_or(S3IDError::InvalidAttributes)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    debug_assert_eq!(q, [0, 2, 4, 6, 8]);
 
     let (tau, tau_opening) = Commitment::multi_index_commit(
         &prv_u.k,

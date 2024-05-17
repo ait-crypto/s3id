@@ -25,9 +25,10 @@ impl ByteConverter<32> for Scalar {
 
     fn from_serde_bytes(bytes: &[u8; 32]) -> Result<Self, Self::Error> {
         let scalar = Self::from_bytes(bytes);
-        match bool::from(scalar.is_some()) {
-            true => Ok(scalar.unwrap()),
-            false => Err(()),
+        if bool::from(scalar.is_some()) {
+            Ok(scalar.unwrap())
+        } else {
+            Err(())
         }
     }
 }
@@ -42,9 +43,10 @@ impl ByteConverter<96> for G1Affine {
 
     fn from_serde_bytes(bytes: &[u8; 96]) -> Result<Self, Self::Error> {
         let point = Self::from_uncompressed(bytes);
-        match bool::from(point.is_some()) {
-            true => Ok(point.unwrap()),
-            false => Err(()),
+        if bool::from(point.is_some()) {
+            Ok(point.unwrap())
+        } else {
+            Err(())
         }
     }
 }
@@ -58,7 +60,7 @@ impl ByteConverter<96> for G1Projective {
     }
 
     fn from_serde_bytes(bytes: &[u8; 96]) -> Result<Self, Self::Error> {
-        G1Affine::from_serde_bytes(bytes).map(|p| p.into())
+        G1Affine::from_serde_bytes(bytes).map(Into::into)
     }
 }
 
@@ -72,9 +74,10 @@ impl ByteConverter<192> for G2Affine {
 
     fn from_serde_bytes(bytes: &[u8; 192]) -> Result<Self, Self::Error> {
         let point = Self::from_uncompressed(bytes);
-        match bool::from(point.is_some()) {
-            true => Ok(point.unwrap()),
-            false => Err(()),
+        if bool::from(point.is_some()) {
+            Ok(point.unwrap())
+        } else {
+            Err(())
         }
     }
 }
@@ -88,7 +91,7 @@ impl ByteConverter<192> for G2Projective {
     }
 
     fn from_serde_bytes(bytes: &[u8; 192]) -> Result<Self, Self::Error> {
-        G2Affine::from_serde_bytes(bytes).map(|p| p.into())
+        G2Affine::from_serde_bytes(bytes).map(Into::into)
     }
 }
 

@@ -110,9 +110,10 @@ impl PublicKey {
 
         let lhs = pairing(&self.0, &check);
         let rhs = pairing(&pp.g, &signature.0);
-        match lhs == rhs {
-            true => Ok(()),
-            false => Err(Error::new()),
+        if lhs == rhs {
+            Ok(())
+        } else {
+            Err(Error::new())
         }
     }
 }
