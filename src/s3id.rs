@@ -43,7 +43,7 @@ impl From<atact::Issuer> for Issuer {
     fn from(value: atact::Issuer) -> Self {
         Self {
             sk: value,
-            _t_dedup: Default::default(),
+            _t_dedup: Vec::default(),
         }
     }
 }

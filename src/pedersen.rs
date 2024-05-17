@@ -295,10 +295,10 @@ impl Commitment {
         self.verify_proof_with_challenge(&c, &proof.pi_1)?;
         commitment_2.verify_proof_with_challenge(&c, &proof.pi_2)?;
 
-        if base * proof.pi_2.s_2 != pk * c + &proof.t3 {
-            Err(Error::InvalidProof)
-        } else {
+        if base * proof.pi_2.s_2 == pk * c + &proof.t3 {
             Ok(())
+        } else {
+            Err(Error::InvalidProof)
         }
     }
 
@@ -408,11 +408,11 @@ impl Commitment {
         self.verify_proof_with_challenge(&c, &proof.pi_1)?;
 
         if &pp.g * proof.pi_2.s_1 + &pp.u * proof.pi_2.s_2 + &multi_pp[idx] * proof.pi_2.s_3
-            != &commitment_2.0 * c + &proof.pi_2.t
+            == &commitment_2.0 * c + &proof.pi_2.t
         {
-            Err(Error::InvalidProof)
-        } else {
             Ok(())
+        } else {
+            Err(Error::InvalidProof)
         }
     }
 
@@ -524,10 +524,10 @@ impl Commitment {
         hash_g1g2(&mut hasher, &proof.t);
         let c = hash_extract_scalar(hasher);
 
-        if check != &self.0 * c + &proof.t {
-            Err(Error::InvalidProof)
-        } else {
+        if check == &self.0 * c + &proof.t {
             Ok(())
+        } else {
+            Err(Error::InvalidProof)
         }
     }
 }

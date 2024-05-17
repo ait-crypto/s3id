@@ -1,3 +1,5 @@
+#![warn(clippy::if_not_else, clippy::default_trait_access)]
+
 pub mod atact;
 mod bls381_helpers;
 mod lagrange;
