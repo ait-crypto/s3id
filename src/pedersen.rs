@@ -6,7 +6,8 @@ use std::{
 
 use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::ff::Field;
-use sha2::{Digest, Sha512};
+// use sha3::{Digest, Sha3_512 as Hasher};
+use sha2::{Digest, Sha512 as Hasher};
 use thiserror::Error;
 
 use crate::bls381_helpers::{
@@ -175,11 +176,11 @@ where
     Scalar::from_bytes_wide(&digest.as_slice().try_into().unwrap())
 }
 
-fn hash_context() -> Sha512 {
-    static INSTANCE: OnceLock<Sha512> = OnceLock::new();
+fn hash_context() -> Hasher {
+    static INSTANCE: OnceLock<Hasher> = OnceLock::new();
     INSTANCE
         .get_or_init(|| {
-            let mut hasher = Sha512::new();
+            let mut hasher = Hasher::new();
             hasher.update(b"hash-pedersen-proof");
             hash_base(&mut hasher);
             hasher
