@@ -9,14 +9,14 @@ use serde::{
     Deserializer, Serializer,
 };
 
-pub trait SerdeWrapper<const SIZE: usize>: Sized {
+pub trait ByteConverter<const SIZE: usize>: Sized {
     type Error;
 
     fn as_serde_bytes(&self) -> [u8; SIZE];
     fn from_serde_bytes(bytes: &[u8; SIZE]) -> Result<Self, Self::Error>;
 }
 
-impl SerdeWrapper<32> for Scalar {
+impl ByteConverter<32> for Scalar {
     type Error = ();
 
     #[inline]
@@ -33,7 +33,7 @@ impl SerdeWrapper<32> for Scalar {
     }
 }
 
-impl SerdeWrapper<96> for G1Affine {
+impl ByteConverter<96> for G1Affine {
     type Error = ();
 
     #[inline]
@@ -50,7 +50,7 @@ impl SerdeWrapper<96> for G1Affine {
     }
 }
 
-impl SerdeWrapper<96> for G1Projective {
+impl ByteConverter<96> for G1Projective {
     type Error = ();
 
     #[inline]
@@ -63,7 +63,7 @@ impl SerdeWrapper<96> for G1Projective {
     }
 }
 
-impl SerdeWrapper<192> for G2Affine {
+impl ByteConverter<192> for G2Affine {
     type Error = ();
 
     #[inline]
@@ -80,7 +80,7 @@ impl SerdeWrapper<192> for G2Affine {
     }
 }
 
-impl SerdeWrapper<192> for G2Projective {
+impl ByteConverter<192> for G2Projective {
     type Error = ();
 
     #[inline]
@@ -95,7 +95,7 @@ impl SerdeWrapper<192> for G2Projective {
 
 pub fn serialize<T, S, const SIZE: usize>(scalar: &T, serializer: S) -> Result<S::Ok, S::Error>
 where
-    T: SerdeWrapper<SIZE>,
+    T: ByteConverter<SIZE>,
     S: Serializer,
 {
     serializer.serialize_bytes(&scalar.as_serde_bytes())
@@ -105,7 +105,7 @@ struct BytesVisitor<T, const SIZE: usize>(PhantomData<T>);
 
 impl<'de2, T, const SIZE: usize> de::Visitor<'de2> for BytesVisitor<T, SIZE>
 where
-    T: SerdeWrapper<SIZE>,
+    T: ByteConverter<SIZE>,
 {
     type Value = T;
 
@@ -128,7 +128,7 @@ where
 
 pub fn deserialize<'de, D, T, const SIZE: usize>(deserializer: D) -> Result<T, D::Error>
 where
-    T: SerdeWrapper<SIZE>,
+    T: ByteConverter<SIZE>,
     D: Deserializer<'de>,
 {
     deserializer.deserialize_bytes(BytesVisitor(PhantomData))

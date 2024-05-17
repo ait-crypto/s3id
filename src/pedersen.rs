@@ -11,7 +11,7 @@ use sha2::{Digest, Sha512 as Hasher};
 use thiserror::Error;
 
 use crate::bls381_helpers::{
-    hash_with_domain_separation_1, hash_with_domain_separation_2, SerdeWrapper,
+    hash_with_domain_separation_1, hash_with_domain_separation_2, ByteConverter,
 };
 
 pub struct PublicParameters {
