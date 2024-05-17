@@ -1,12 +1,6 @@
-use std::marker::PhantomData;
-
 use bls12_381::{
     hash_to_curve::{ExpandMsgXmd, HashToCurve},
     G1Affine, G1Projective, G2Affine, G2Projective, Scalar,
-};
-use serde::{
-    de::{self},
-    Deserializer, Serializer,
 };
 
 pub trait ByteConverter<const SIZE: usize>: Sized {
@@ -91,47 +85,6 @@ impl ByteConverter<192> for G2Projective {
     fn from_serde_bytes(bytes: &[u8; 192]) -> Result<Self, Self::Error> {
         G2Affine::from_serde_bytes(bytes).map(|p| p.into())
     }
-}
-
-pub fn serialize<T, S, const SIZE: usize>(scalar: &T, serializer: S) -> Result<S::Ok, S::Error>
-where
-    T: ByteConverter<SIZE>,
-    S: Serializer,
-{
-    serializer.serialize_bytes(&scalar.as_serde_bytes())
-}
-
-struct BytesVisitor<T, const SIZE: usize>(PhantomData<T>);
-
-impl<'de2, T, const SIZE: usize> de::Visitor<'de2> for BytesVisitor<T, SIZE>
-where
-    T: ByteConverter<SIZE>,
-{
-    type Value = T;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(formatter, "a scalar encoded as {} bytes", 32)
-    }
-
-    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        v.try_into()
-            .map_err(|_| E::invalid_length(v.len(), &self))
-            .and_then(|bytes| {
-                T::from_serde_bytes(bytes)
-                    .map_err(|_| E::invalid_value(de::Unexpected::Bytes(v), &self))
-            })
-    }
-}
-
-pub fn deserialize<'de, D, T, const SIZE: usize>(deserializer: D) -> Result<T, D::Error>
-where
-    T: ByteConverter<SIZE>,
-    D: Deserializer<'de>,
-{
-    deserializer.deserialize_bytes(BytesVisitor(PhantomData))
 }
 
 #[inline]

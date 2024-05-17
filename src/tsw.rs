@@ -7,11 +7,10 @@ use std::{
 use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::ff::Field;
 use rand::{thread_rng, RngCore};
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{self, hash_usize_1, hash_usize_2, pairing},
+    bls381_helpers::{hash_usize_1, hash_usize_2, pairing},
     lagrange::Lagrange,
     pedersen::{get_parameters, Commitment},
 };
@@ -31,9 +30,8 @@ impl Error {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SecretKey {
-    #[serde(with = "bls381_helpers")]
     pub(crate) sk: Scalar,
 }
 
@@ -89,11 +87,9 @@ impl SecretKey {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PublicKey {
-    #[serde(with = "bls381_helpers")]
     pub(crate) pk_1: G1Projective,
-    #[serde(with = "bls381_helpers")]
     pub(crate) pk_2: G2Projective,
 }
 
@@ -136,11 +132,9 @@ impl PublicKey {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Signature {
-    #[serde(with = "bls381_helpers")]
     pub(crate) sigma_1: G1Projective,
-    #[serde(with = "bls381_helpers")]
     pub(crate) sigma_2: G2Projective,
 }
 
