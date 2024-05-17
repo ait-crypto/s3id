@@ -3,17 +3,15 @@ use std::{
     ops::{Add, Mul, Sub},
 };
 
-use bls12_381::{Bls12, G1Projective, G2Projective, Scalar};
+use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::ff::Field;
-use pairing::Engine;
 use rand::{thread_rng, RngCore};
 use serde::{Deserialize, Serialize};
-use signature::{Signer, Verifier};
 
 use crate::{
-    bls381_helpers::{self, hash_1, hash_2, hash_to_scalar, hash_usize_1, hash_usize_2, pairing},
+    bls381_helpers::{self, hash_usize_1, hash_usize_2, pairing},
     lagrange::Lagrange,
-    pedersen::{get_g, get_ghat, get_u, get_uhat, Commitment},
+    pedersen::{get_parameters, Commitment},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,9 +57,10 @@ impl SecretKey {
     }
 
     pub fn to_public_key(&self) -> PublicKey {
+        let pp = get_parameters();
         PublicKey {
-            pk_1: (get_g() * self.sk),
-            pk_2: (get_ghat() * self.sk),
+            pk_1: (pp.g * self.sk),
+            pk_2: (pp.ghat * self.sk),
         }
     }
 
@@ -101,16 +100,18 @@ impl PublicKey {
         index: usize,
         signature: &Signature,
     ) -> Result<(), signature::Error> {
+        let pp = get_parameters();
+
         let hi_1 = hash_usize_1(index);
         let lhs = pairing(hi_1 + commitment.cm_1, self.pk_2);
-        let rhs = pairing(signature.sigma_1, get_ghat());
+        let rhs = pairing(signature.sigma_1, pp.ghat);
         if lhs != rhs {
             return Err(signature::Error::new());
         }
 
         let hi_2 = hash_usize_2(index);
         let lhs = pairing(self.pk_1, hi_2 + commitment.cm_2);
-        let rhs = pairing(get_g(), signature.sigma_2);
+        let rhs = pairing(pp.g, signature.sigma_2);
         match lhs == rhs {
             true => Ok(()),
             false => Err(signature::Error::new()),
@@ -146,34 +147,10 @@ impl<'a> FromIterator<&'a Signature> for Signature {
     }
 }
 
-impl Signer<Signature> for SecretKey {
-    fn try_sign(&self, msg: &[u8]) -> Result<Signature, signature::Error> {
-        let m = hash_to_scalar(msg);
-        Ok(Signature {
-            sigma_1: ((hash_1(msg) + get_u() * m) * self.sk),
-            sigma_2: ((hash_2(msg) + get_uhat() * m) * self.sk),
-        })
-    }
-}
-
 impl PublicKey {
     pub fn is_valid(&self) -> bool {
-        Bls12::pairing(&self.pk_1.into(), &get_ghat().into())
-            == Bls12::pairing(&get_g().into(), &self.pk_2.into())
-    }
-}
-
-impl Verifier<Signature> for PublicKey {
-    fn verify(&self, msg: &[u8], signature: &Signature) -> Result<(), signature::Error> {
-        let m = hash_to_scalar(msg);
-        let lhs = Bls12::pairing(&(hash_1(msg) + get_u() * m).into(), &self.pk_2.into());
-        let rhs = Bls12::pairing(&signature.sigma_1.into(), &get_ghat().into());
-        let lhsp = Bls12::pairing(&self.pk_1.into(), &(hash_2(msg) + get_uhat() * m).into());
-        let rhsp = Bls12::pairing(&get_g().into(), &signature.sigma_2.into());
-        match (lhs == rhs, lhsp == rhsp) {
-            (true, true) => Ok(()),
-            _ => Err(signature::Error::new()),
-        }
+        let pp = get_parameters();
+        pairing(self.pk_1, pp.ghat) == pairing(pp.g, self.pk_2)
     }
 }
 
@@ -386,23 +363,17 @@ mod test {
     use super::*;
 
     #[test]
-    fn sw() {
-        let sk = SecretKey::new();
-        let pk = sk.to_public_key();
-        assert!(pk.is_valid());
-
-        let sig = sk.sign(b"test");
-        assert!(pk.verify(b"test", &sig).is_ok());
-    }
-
-    #[test]
     fn tsw() {
         let n = 10;
         let t = n / 2 + 1;
 
+        let (cm, _) = Commitment::commit(&Scalar::random(rand::thread_rng()));
         let sk = SecretKey::new();
         let sks = sk.into_shares(n, t);
-        let sigs: Vec<_> = sks.iter().map(|sk| sk.sign(b"test")).collect();
+        let sigs: Vec<_> = sks
+            .iter()
+            .map(|sk| sk.sign_pedersen_commitment(&cm, 0))
+            .collect();
 
         let lagrange = Lagrange::new(
             (1..=t)
@@ -415,7 +386,7 @@ mod test {
         assert_eq!(pk, sk.to_public_key());
 
         let sig = Signature::from_shares(&sigs[..t], &lagrange);
-        assert!(pk.verify(b"test", &sig).is_ok());
+        assert!(pk.verify_pedersen_commitment(&cm, 0, &sig).is_ok());
 
         let lagrange = Lagrange::new(
             (2..=t + 1)
@@ -428,7 +399,7 @@ mod test {
         assert_eq!(other_pk, pk);
 
         let sig = Signature::from_shares(&sigs[1..t + 1], &lagrange);
-        assert!(pk.verify(b"test", &sig).is_ok());
+        assert!(pk.verify_pedersen_commitment(&cm, 0, &sig).is_ok());
 
         let lagrange = Lagrange::new(
             (1..=n)
@@ -441,7 +412,7 @@ mod test {
         assert_eq!(pk, sk.to_public_key());
 
         let sig = Signature::from_shares(&sigs, &lagrange);
-        assert!(pk.verify(b"test", &sig).is_ok());
+        assert!(pk.verify_pedersen_commitment(&cm, 0, &sig).is_ok());
     }
 
     #[test]
@@ -472,9 +443,10 @@ mod test {
     fn sw_multi_index_commitment() {
         const L: usize = 10;
 
+        let pp = get_parameters();
         let sk = SecretKey::new();
         let pk = sk.to_public_key();
-        let pp = MultiBasePublicParameters::new(L);
+        let multi_pp = MultiBasePublicParameters::new(L);
         let value_0 = Scalar::random(rand::thread_rng());
 
         let index_attributes = [
@@ -485,7 +457,7 @@ mod test {
         let signatures: Vec<_> = index_attributes
             .iter()
             .map(|(idx, attribute)| {
-                let (cm, o) = Commitment::index_commit(&value_0, *idx, attribute, &pp);
+                let (cm, o) = Commitment::index_commit(&value_0, *idx, attribute, &multi_pp);
                 let sigma = sk.sign_pedersen_commitment(&cm, *idx);
                 (cm, o, sigma)
             })
@@ -499,11 +471,11 @@ mod test {
         );
 
         assert_eq!(
-            pairing(sigma.sigma_1, get_ghat()),
+            pairing(sigma.sigma_1, pp.ghat),
             pairing(h_1 + cm.cm_1, pk.pk_2)
         );
         assert_eq!(
-            pairing(get_g(), sigma.sigma_2),
+            pairing(pp.g, sigma.sigma_2),
             pairing(pk.pk_1, h_2 + cm.cm_2)
         );
     }

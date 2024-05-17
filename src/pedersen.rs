@@ -13,24 +13,27 @@ use crate::bls381_helpers::{
     hash_with_domain_separation_1, hash_with_domain_separation_2, SerdeWrapper,
 };
 
-pub fn get_g() -> &'static G1Projective {
-    static INSTANCE: OnceLock<G1Projective> = OnceLock::new();
-    INSTANCE.get_or_init(|| hash_with_domain_separation_1(b"g", b"Pedersen-PP"))
+pub struct PublicParameters {
+    pub g: G1Projective,
+    pub u: G1Projective,
+    pub ghat: G2Projective,
+    pub uhat: G2Projective,
 }
 
-pub fn get_ghat() -> &'static G2Projective {
-    static INSTANCE: OnceLock<G2Projective> = OnceLock::new();
-    INSTANCE.get_or_init(|| hash_with_domain_separation_2(b"g", b"Pedersen-PP"))
+impl PublicParameters {
+    fn new() -> Self {
+        Self {
+            g: hash_with_domain_separation_1(b"g", b"Pedersen-PP"),
+            ghat: hash_with_domain_separation_2(b"g", b"Pedersen-PP"),
+            u: hash_with_domain_separation_1(b"u", b"Pedersen-PP"),
+            uhat: hash_with_domain_separation_2(b"u", b"Pedersen-PP"),
+        }
+    }
 }
 
-pub fn get_u() -> &'static G1Projective {
-    static INSTANCE: OnceLock<G1Projective> = OnceLock::new();
-    INSTANCE.get_or_init(|| hash_with_domain_separation_1(b"u", b"Pedersen-PP"))
-}
-
-pub fn get_uhat() -> &'static G2Projective {
-    static INSTANCE: OnceLock<G2Projective> = OnceLock::new();
-    INSTANCE.get_or_init(|| hash_with_domain_separation_2(b"u", b"Pedersen-PP"))
+pub fn get_parameters() -> &'static PublicParameters {
+    static INSTANCE: OnceLock<PublicParameters> = OnceLock::new();
+    INSTANCE.get_or_init(PublicParameters::new)
 }
 
 #[derive(Error, Debug, PartialEq, Eq, Clone)]
@@ -155,10 +158,12 @@ fn hash_base<D>(hasher: &mut D)
 where
     D: Digest,
 {
-    hash_g1(hasher, get_g());
-    hash_g1(hasher, get_u());
-    hash_g2(hasher, get_ghat());
-    hash_g2(hasher, get_uhat());
+    let pp = get_parameters();
+
+    hash_g1(hasher, &pp.g);
+    hash_g1(hasher, &pp.u);
+    hash_g2(hasher, &pp.ghat);
+    hash_g2(hasher, &pp.uhat);
 }
 
 #[inline]
@@ -196,19 +201,21 @@ impl Commitment {
     }
 
     pub fn commit_with_randomness(message: &Scalar, r: &Scalar) -> (Commitment, Opening) {
+        let pp = get_parameters();
         (
             Commitment {
-                cm_1: get_g() * r + get_u() * message,
-                cm_2: get_ghat() * r + get_uhat() * message,
+                cm_1: pp.g * r + pp.u * message,
+                cm_2: pp.ghat * r + pp.uhat * message,
             },
             Opening { r: *r },
         )
     }
 
     pub fn verify(&self, message: &Scalar, opening: &Opening) -> Result<(), Error> {
+        let pp = get_parameters();
         match (
-            get_g() * opening.r + get_u() * message == self.cm_1,
-            get_ghat() * opening.r + get_uhat() * message == self.cm_2,
+            pp.g * opening.r + pp.u * message == self.cm_1,
+            pp.ghat * opening.r + pp.uhat * message == self.cm_2,
         ) {
             (true, true) => Ok(()),
             _ => Err(Error::InvalidOpening),
@@ -217,10 +224,12 @@ impl Commitment {
 
     pub fn proof(&self, message: &Scalar, opening: &Opening) -> Proof {
         let mut rng = rand::thread_rng();
+        let pp = get_parameters();
+
         let r_1 = Scalar::random(&mut rng);
         let r_2 = Scalar::random(&mut rng);
-        let t_1 = get_g() * r_1 + get_u() * r_2;
-        let t_2 = get_ghat() * r_1 + get_uhat() * r_2;
+        let t_1 = pp.g * r_1 + pp.u * r_2;
+        let t_2 = pp.ghat * r_1 + pp.uhat * r_2;
 
         let c = hash_pedersen_proof(self, &t_1, &t_2);
         let s_1 = r_1 + opening.r * c;
@@ -230,10 +239,11 @@ impl Commitment {
     }
 
     fn verify_proof_with_challenge(&self, c: &Scalar, proof: &Proof) -> Result<(), Error> {
-        if get_g() * proof.s_1 + get_u() * proof.s_2 != proof.t_1 + self.cm_1 * c {
+        let pp = get_parameters();
+        if pp.g * proof.s_1 + pp.u * proof.s_2 != proof.t_1 + self.cm_1 * c {
             return Err(Error::InvalidProof);
         }
-        if get_ghat() * proof.s_1 + get_uhat() * proof.s_2 != proof.t_2 + self.cm_2 * c {
+        if pp.ghat * proof.s_1 + pp.uhat * proof.s_2 != proof.t_2 + self.cm_2 * c {
             return Err(Error::InvalidProof);
         }
         Ok(())
@@ -255,16 +265,18 @@ impl Commitment {
         (base_1, base_2): (&G1Projective, &G2Projective),
         (pk_1, pk_2): (&G1Projective, &G2Projective),
     ) -> Proof2PK {
+        let pp = get_parameters();
         let mut rng = rand::thread_rng();
+
         let r1_1 = Scalar::random(&mut rng);
         let r1_2 = Scalar::random(&mut rng);
-        let t1_1 = get_g() * r1_1 + get_u() * r1_2;
-        let t1_2 = get_ghat() * r1_1 + get_uhat() * r1_2;
+        let t1_1 = pp.g * r1_1 + pp.u * r1_2;
+        let t1_2 = pp.ghat * r1_1 + pp.uhat * r1_2;
 
         let r2_1 = Scalar::random(&mut rng);
         let r2_2 = Scalar::random(&mut rng);
-        let t2_1 = get_g() * r2_1 + get_u() * r2_2;
-        let t2_2 = get_ghat() * r2_1 + get_uhat() * r2_2;
+        let t2_1 = pp.g * r2_1 + pp.u * r2_2;
+        let t2_2 = pp.ghat * r2_1 + pp.uhat * r2_2;
 
         let t3_1 = base_1 * r2_2;
         let t3_2 = base_2 * r2_2;
@@ -347,15 +359,16 @@ impl Commitment {
         value_0: &Scalar,
         idx: usize,
         value_i: &Scalar,
-        pp: &MultiBasePublicParameters,
+        multi_pp: &MultiBasePublicParameters,
     ) -> (Commitment, Opening) {
-        debug_assert!(idx < pp.us.len());
+        debug_assert!(idx < multi_pp.us.len());
 
         let r = Scalar::random(rand::thread_rng());
+        let pp = get_parameters();
         (
             Commitment {
-                cm_1: get_g() * r + get_u() * value_0 + pp.us[idx] * value_i,
-                cm_2: get_ghat() * r + get_uhat() * value_0 + pp.uhats[idx] * value_i,
+                cm_1: pp.g * r + pp.u * value_0 + multi_pp.us[idx] * value_i,
+                cm_2: pp.ghat * r + pp.uhat * value_0 + multi_pp.uhats[idx] * value_i,
             },
             Opening { r },
         )
@@ -367,13 +380,14 @@ impl Commitment {
         idx: usize,
         value_i: &Scalar,
         opening: &Opening,
-        pp: &MultiBasePublicParameters,
+        multi_pp: &MultiBasePublicParameters,
     ) -> Result<(), Error> {
-        debug_assert!(idx < pp.us.len());
+        debug_assert!(idx < multi_pp.us.len());
 
+        let pp = get_parameters();
         match (
-            self.cm_1 == get_g() * opening.r + get_u() * value_0 + pp.us[idx] * value_i,
-            self.cm_2 == get_ghat() * opening.r + get_uhat() * value_0 + pp.uhats[idx] * value_i,
+            self.cm_1 == pp.g * opening.r + pp.u * value_0 + multi_pp.us[idx] * value_i,
+            self.cm_2 == pp.ghat * opening.r + pp.uhat * value_0 + multi_pp.uhats[idx] * value_i,
         ) {
             (true, true) => Ok(()),
             _ => Err(Error::InvalidOpening),
@@ -390,23 +404,25 @@ impl Commitment {
         idx: usize,
         value_i: &Scalar,
         opening_2: &Opening,
-        pp: &MultiBasePublicParameters,
+        multi_pp: &MultiBasePublicParameters,
     ) -> ProofMultiBase {
+        let pp = get_parameters();
         let mut rng = rand::thread_rng();
+
         let r1_1 = Scalar::random(&mut rng);
         let r1_2 = Scalar::random(&mut rng);
-        let t1_1 = get_g() * r1_1 + get_u() * r1_2;
-        let t1_2 = get_ghat() * r1_1 + get_uhat() * r1_2;
+        let t1_1 = pp.g * r1_1 + pp.u * r1_2;
+        let t1_2 = pp.ghat * r1_1 + pp.uhat * r1_2;
 
         let r2_1 = Scalar::random(&mut rng);
         let r2_2 = Scalar::random(&mut rng);
         let r2_3 = Scalar::random(&mut rng);
-        let t2_1 = get_g() * r2_1 + get_u() * r2_2 + pp.us[idx] * r2_3;
-        let t2_2 = get_ghat() * r2_1 + get_uhat() * r2_2 + pp.uhats[idx] * r2_3;
+        let t2_1 = pp.g * r2_1 + pp.u * r2_2 + multi_pp.us[idx] * r2_3;
+        let t2_2 = pp.ghat * r2_1 + pp.uhat * r2_2 + multi_pp.uhats[idx] * r2_3;
 
         let mut hasher = hash_context();
-        hash_g1(&mut hasher, &pp.us[idx]);
-        hash_g2(&mut hasher, &pp.uhats[idx]);
+        hash_g1(&mut hasher, &multi_pp.us[idx]);
+        hash_g2(&mut hasher, &multi_pp.uhats[idx]);
         hash_commitment(&mut hasher, self);
         hash_commitment(&mut hasher, commitment_2);
         hash_g1(&mut hasher, &t1_1);
@@ -443,11 +459,12 @@ impl Commitment {
         commitment_2: &Commitment,
         idx: usize,
         proof: &ProofMultiBase,
-        pp: &MultiBasePublicParameters,
+        multi_pp: &MultiBasePublicParameters,
     ) -> Result<(), Error> {
+        let pp = get_parameters();
         let mut hasher = hash_context();
-        hash_g1(&mut hasher, &pp.us[idx]);
-        hash_g2(&mut hasher, &pp.uhats[idx]);
+        hash_g1(&mut hasher, &multi_pp.us[idx]);
+        hash_g2(&mut hasher, &multi_pp.uhats[idx]);
         hash_commitment(&mut hasher, self);
         hash_commitment(&mut hasher, commitment_2);
         hash_g1(&mut hasher, &proof.pi_1.t_1);
@@ -458,11 +475,11 @@ impl Commitment {
 
         self.verify_proof_with_challenge(&c, &proof.pi_1)?;
 
-        if get_g() * proof.pi_2.s_1 + get_u() * proof.pi_2.s_2 + pp.us[idx] * proof.pi_2.s_3
+        if pp.g * proof.pi_2.s_1 + pp.u * proof.pi_2.s_2 + multi_pp.us[idx] * proof.pi_2.s_3
             != proof.pi_2.t_1 + commitment_2.cm_1 * c
-            || get_ghat() * proof.pi_2.s_1
-                + get_uhat() * proof.pi_2.s_2
-                + pp.uhats[idx] * proof.pi_2.s_3
+            || pp.ghat * proof.pi_2.s_1
+                + pp.uhat * proof.pi_2.s_2
+                + multi_pp.uhats[idx] * proof.pi_2.s_3
                 != proof.pi_2.t_2 + commitment_2.cm_2 * c
         {
             Err(Error::InvalidProof)
@@ -474,20 +491,21 @@ impl Commitment {
     pub fn multi_index_commit<I>(
         value_0: &Scalar,
         iter: I,
-        pp: &MultiBasePublicParameters,
+        multi_pp: &MultiBasePublicParameters,
     ) -> (Commitment, Opening)
     where
         I: Iterator<Item = (usize, Scalar)>,
     {
+        let pp = get_parameters();
         let r = Scalar::random(rand::thread_rng());
         let (cm_1, cm_2) = iter.fold(
-            (
-                get_g() * r + get_u() * value_0,
-                get_ghat() * r + get_uhat() * value_0,
-            ),
+            (pp.g * r + pp.u * value_0, pp.ghat * r + pp.uhat * value_0),
             |(cm_1, cm_2), (idx, value_i)| {
-                debug_assert!(idx < pp.us.len());
-                (cm_1 + pp.us[idx] * value_i, cm_2 + pp.uhats[idx] * value_i)
+                debug_assert!(idx < multi_pp.us.len());
+                (
+                    cm_1 + multi_pp.us[idx] * value_i,
+                    cm_2 + multi_pp.uhats[idx] * value_i,
+                )
             },
         );
 
@@ -499,19 +517,23 @@ impl Commitment {
         value_0: &Scalar,
         iter: I,
         opening: &Opening,
-        pp: &MultiBasePublicParameters,
+        multi_pp: &MultiBasePublicParameters,
     ) -> Result<(), Error>
     where
         I: Iterator<Item = (usize, Scalar)>,
     {
+        let pp = get_parameters();
         let (cm_1, cm_2) = iter.fold(
             (
-                get_g() * opening.r + get_u() * value_0,
-                get_ghat() * opening.r + get_uhat() * value_0,
+                pp.g * opening.r + pp.u * value_0,
+                pp.ghat * opening.r + pp.uhat * value_0,
             ),
             |(cm_1, cm_2), (idx, value_i)| {
-                debug_assert!(idx < pp.us.len());
-                (cm_1 + pp.us[idx] * value_i, cm_2 + pp.uhats[idx] * value_i)
+                debug_assert!(idx < multi_pp.us.len());
+                (
+                    cm_1 + multi_pp.us[idx] * value_i,
+                    cm_2 + multi_pp.uhats[idx] * value_i,
+                )
             },
         );
 
@@ -527,13 +549,13 @@ impl Commitment {
         value_0: &Scalar,
         iter: I,
         opening: &Opening,
-        pp: &MultiBasePublicParameters,
+        multi_pp: &MultiBasePublicParameters,
     ) -> ProofMultiIndex
     where
         I: Iterator<Item = (usize, Scalar)> + ExactSizeIterator,
     {
+        let pp = get_parameters();
         let randoms_and_values = Vec::with_capacity(iter.len());
-
         let mut rng = rand::thread_rng();
         let r1 = Scalar::random(&mut rng);
         let r2 = Scalar::random(&mut rng);
@@ -541,18 +563,18 @@ impl Commitment {
 
         let (t_1, t_2, randoms_and_values) = iter.fold(
             (
-                get_g() * r1 + get_u() * r2,
-                get_ghat() * r1 + get_uhat() * r2,
+                pp.g * r1 + pp.u * r2,
+                pp.ghat * r1 + pp.uhat * r2,
                 randoms_and_values,
             ),
             |(t1, t2, mut randoms_and_values), (idx, value_i)| {
                 let random = Scalar::random(&mut rng);
                 randoms_and_values.push((idx, random, value_i));
-                hash_g1(&mut hasher, &pp.us[idx]);
-                hash_g2(&mut hasher, &pp.uhats[idx]);
+                hash_g1(&mut hasher, &multi_pp.us[idx]);
+                hash_g2(&mut hasher, &multi_pp.uhats[idx]);
                 (
-                    t1 + pp.us[idx] * random,
-                    t2 + pp.uhats[idx] * random,
+                    t1 + multi_pp.us[idx] * random,
+                    t2 + multi_pp.uhats[idx] * random,
                     randoms_and_values,
                 )
             },
@@ -581,20 +603,24 @@ impl Commitment {
     pub fn verify_proof_multi_index_commit(
         &self,
         proof: &ProofMultiIndex,
-        pp: &MultiBasePublicParameters,
+        multi_pp: &MultiBasePublicParameters,
     ) -> Result<(), Error> {
         let mut hasher = hash_context();
+        let pp = get_parameters();
 
         let (c_1, c_2) = proof.s_i.iter().fold(
             (
-                get_g() * proof.s_1 + get_u() * proof.s_2,
-                get_ghat() * proof.s_1 + get_uhat() * proof.s_2,
+                pp.g * proof.s_1 + pp.u * proof.s_2,
+                pp.ghat * proof.s_1 + pp.uhat * proof.s_2,
             ),
             |(c_1, c_2), (idx, s_i)| {
-                hash_g1(&mut hasher, &pp.us[*idx]);
-                hash_g2(&mut hasher, &pp.uhats[*idx]);
+                hash_g1(&mut hasher, &multi_pp.us[*idx]);
+                hash_g2(&mut hasher, &multi_pp.uhats[*idx]);
 
-                (c_1 + pp.us[*idx] * s_i, c_2 + pp.uhats[*idx] * s_i)
+                (
+                    c_1 + multi_pp.us[*idx] * s_i,
+                    c_2 + multi_pp.uhats[*idx] * s_i,
+                )
             },
         );
 
@@ -722,6 +748,7 @@ mod test {
 
     #[test]
     fn pedersen_proof_2_pk() {
+        let pp = get_parameters();
         let msg_1 = Scalar::random(rand::thread_rng());
         let (cm_1, o_1) = Commitment::commit(&msg_1);
         assert!(cm_1.verify(&msg_1, &o_1).is_ok());
@@ -730,7 +757,7 @@ mod test {
         assert!(cm_2.verify(&msg_2, &o_2).is_ok());
 
         let o_3 = msg_2;
-        let (pk_1, pk_2) = (get_g() * o_3, get_ghat() * o_3);
+        let (pk_1, pk_2) = (pp.g * o_3, pp.ghat * o_3);
 
         let proof = cm_1.proof_2_pk(
             &msg_1,
@@ -738,11 +765,11 @@ mod test {
             &cm_2,
             &msg_2,
             &o_2,
-            (get_g(), get_ghat()),
+            (&pp.g, &pp.ghat),
             (&pk_1, &pk_2),
         );
         assert!(cm_1
-            .verify_proof_2_pk(&cm_2, get_g(), get_ghat(), &pk_1, &pk_2, &proof)
+            .verify_proof_2_pk(&cm_2, &pp.g, &pp.ghat, &pk_1, &pk_2, &proof)
             .is_ok());
     }
 

@@ -8,7 +8,6 @@ use serde::{
     de::{self},
     Deserializer, Serializer,
 };
-use sha2::{Digest, Sha512};
 
 pub trait SerdeWrapper<const SIZE: usize>: Sized {
     type Error;
@@ -151,29 +150,6 @@ pub fn hash_with_domain_separation_1(msg: &[u8], domain_separator: &[u8]) -> G1P
 #[inline]
 pub fn hash_with_domain_separation_2(msg: &[u8], domain_separator: &[u8]) -> G2Projective {
     <G2Projective as HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(msg, domain_separator)
-}
-
-#[inline]
-pub fn hash_1(msg: &[u8]) -> G1Projective {
-    hash_with_domain_separation_1(msg, b"BLS-H2-G1")
-}
-
-#[inline]
-pub fn hash_2(msg: &[u8]) -> G2Projective {
-    hash_with_domain_separation_2(msg, b"BLS-H2-G2")
-}
-
-pub fn hash_to_scalar_with_domain_separation(message: &[u8], domain_separator: &[u8]) -> Scalar {
-    let mut hasher = Sha512::new();
-    hasher.update(domain_separator);
-    hasher.update(message);
-    let digest = hasher.finalize();
-    Scalar::from_bytes_wide(&digest.as_slice().try_into().unwrap())
-}
-
-#[inline]
-pub fn hash_to_scalar(message: &[u8]) -> Scalar {
-    hash_to_scalar_with_domain_separation(message, b"hash-to-scalar")
 }
 
 #[inline]

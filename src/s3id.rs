@@ -8,7 +8,7 @@ use crate::{
     atact::{self, AtACTError, Token},
     bls381_helpers::{hash_usize_1, hash_usize_2, pairing},
     pedersen::{
-        self, get_g, get_ghat, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
+        self, get_parameters, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
     },
     tsw::Signature,
 };
@@ -238,8 +238,10 @@ pub fn verifycred(
     let pk = &pp.atact_pp.pk;
     let zeta = &cred.zeta;
     let tau = &cred.tau;
-    if pairing(zeta.sigma_1, get_ghat()) != pairing(h_1 + tau.cm_1, pk.pk_2)
-        || pairing(get_g(), zeta.sigma_2) != pairing(pk.pk_1, h_2 + tau.cm_2)
+    let pp = get_parameters();
+
+    if pairing(zeta.sigma_1, pp.ghat) != pairing(h_1 + tau.cm_1, pk.pk_2)
+        || pairing(pp.g, zeta.sigma_2) != pairing(pk.pk_1, h_2 + tau.cm_2)
     {
         Err(S3IDError::InvalidCredential)
     } else {
