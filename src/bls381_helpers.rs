@@ -55,15 +55,11 @@ impl SerdeWrapper<96> for G1Projective {
 
     #[inline]
     fn as_serde_bytes(&self) -> [u8; 96] {
-        G1Affine::from(self).to_uncompressed()
+        G1Affine::from(self).as_serde_bytes()
     }
 
     fn from_serde_bytes(bytes: &[u8; 96]) -> Result<Self, Self::Error> {
-        let point = G1Affine::from_uncompressed(bytes);
-        match bool::from(point.is_some()) {
-            true => Ok(point.unwrap().into()),
-            false => Err(()),
-        }
+        G1Affine::from_serde_bytes(bytes).map(|p| p.into())
     }
 }
 
@@ -89,15 +85,11 @@ impl SerdeWrapper<192> for G2Projective {
 
     #[inline]
     fn as_serde_bytes(&self) -> [u8; 192] {
-        G2Affine::from(self).to_uncompressed()
+        G2Affine::from(self).as_serde_bytes()
     }
 
     fn from_serde_bytes(bytes: &[u8; 192]) -> Result<Self, Self::Error> {
-        let point = G2Affine::from_uncompressed(bytes);
-        match bool::from(point.is_some()) {
-            true => Ok(point.unwrap().into()),
-            false => Err(()),
-        }
+        G2Affine::from_serde_bytes(bytes).map(|p| p.into())
     }
 }
 
