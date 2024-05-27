@@ -8,7 +8,7 @@ use crate::{
     bls381_helpers::{pairing, ByteConverter},
     lagrange::Lagrange,
     pedersen::{Commitment, Proof2PK},
-    tsw::{PublicKey, SecretKey, Signature},
+    tsw::{self, PublicKey, SecretKey, Signature},
 };
 
 const UNIQUE_ATTRIBUTE_INDEX: usize = 0;
@@ -31,6 +31,7 @@ pub struct PublicParameters {
     pub lagrange_n: Lagrange,
     pub lagrange_t: Lagrange,
     lagrange_tprime: Lagrange,
+    pub tsw_pp: tsw::PublicParameters,
 }
 
 pub fn setup(
@@ -38,6 +39,7 @@ pub fn setup(
     n: usize,
     t: usize,
     tprime: usize,
+    l: usize,
 ) -> Result<(PublicParameters, Vec<Issuer>), AtACTError> {
     if tprime < 2 || tprime >= n || t < 2 || t >= num_issuers {
         return Err(AtACTError::InvalidParameters);
@@ -69,6 +71,7 @@ pub fn setup(
                 .collect::<Vec<_>>()
                 .as_ref(),
         ),
+        tsw_pp: tsw::PublicParameters::new(l + 1),
     };
 
     Ok((
@@ -202,9 +205,11 @@ pub fn tissue(
         .cm_ks
         .iter()
         .map(|commitment| BlindToken {
-            sigma: prv_j
-                .sk
-                .sign_pedersen_commitment(commitment, UNIQUE_ATTRIBUTE_INDEX),
+            sigma: prv_j.sk.sign_pedersen_commitment(
+                commitment,
+                UNIQUE_ATTRIBUTE_INDEX,
+                &pp.tsw_pp,
+            ),
         })
         .collect())
 }
@@ -357,7 +362,12 @@ pub fn verify(
 
             let sigma = sk_prime + rk_prime;
             if pk_prime
-                .verify_pedersen_commitment(&blind_request.cm_ks[k], UNIQUE_ATTRIBUTE_INDEX, &sigma)
+                .verify_pedersen_commitment(
+                    &blind_request.cm_ks[k],
+                    UNIQUE_ATTRIBUTE_INDEX,
+                    &sigma,
+                    &pp.tsw_pp,
+                )
                 .is_err()
             {
                 errs.push(AtACTError::InvalidSignature(k));
@@ -426,7 +436,7 @@ mod test {
             .map(|_| Scalar::random(&mut rng))
             .collect();
 
-        let (pp, issuers) = setup(NUM_ISSUERS, N, T, TPRIME).expect("setup failed");
+        let (pp, issuers) = setup(NUM_ISSUERS, N, T, TPRIME, 1).expect("setup failed");
 
         for a in attributes {
             let (strg, cm) = register(&a, &pp).expect("register failed");
@@ -456,7 +466,7 @@ mod test {
                 let tprime = n / 2 + 1;
 
                 assert!(
-                    setup(num_issuers, n, t, tprime).is_ok(),
+                    setup(num_issuers, n, t, tprime, 1).is_ok(),
                     "issuers {}, t {}, n {}, t' {}",
                     num_issuers,
                     t,

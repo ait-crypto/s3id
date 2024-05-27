@@ -9,7 +9,7 @@ fn bench_atact(c: &mut Criterion, num_issuers: usize, n: usize, t: usize, tprime
     let mut rng = rand::thread_rng();
     let a = Scalar::random(&mut rng);
 
-    let (pp, issuers) = setup(num_issuers, n, t, tprime).expect("setup failed");
+    let (pp, issuers) = setup(num_issuers, n, t, tprime, 1).expect("setup failed");
 
     c.bench_function("register", |b| {
         b.iter(|| {

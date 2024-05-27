@@ -55,7 +55,7 @@ pub fn setup(
     tprime: usize,
     big_l: usize,
 ) -> Result<(PublicParameters, Vec<Issuer>), S3IDError> {
-    let (atact_pp, issuers) = atact::setup(num_issuers, n, t, tprime)?;
+    let (atact_pp, issuers) = atact::setup(num_issuers, n, t, tprime, big_l + 1)?;
     let pedersen_pp = MultiBasePublicParameters::new(big_l);
 
     Ok((
@@ -159,7 +159,11 @@ pub fn microcred(
                     // TODO: T_Dedup check
 
                     // 10.g
-                    Ok(issuer.sk.as_ref().sign_pedersen_commitment(&cm_i, idx))
+                    Ok(issuer.sk.as_ref().sign_pedersen_commitment(
+                        &cm_i,
+                        idx + 1,
+                        &pp.atact_pp.tsw_pp,
+                    ))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             // 10.h
@@ -169,7 +173,7 @@ pub fn microcred(
             debug_assert!(pp
                 .atact_pp
                 .pk
-                .verify_pedersen_commitment(&cm_i, idx, &sigma_i)
+                .verify_pedersen_commitment(&cm_i, idx + 1, &sigma_i, &pp.atact_pp.tsw_pp)
                 .is_ok());
             // 10.i
             Ok(&sigma_i + &(&pp.atact_pp.pk * -*op_i.as_ref()))
@@ -229,7 +233,11 @@ pub fn verifycred(
     cred.tau
         .verify_proof_multi_index_commit(pi, &pp.pedersen_pp)?;
 
-    let h: G1G2 = pi.s_i.iter().map(|(idx, _)| hash_usize(*idx)).sum();
+    let h: G1G2 = pi
+        .s_i
+        .iter()
+        .map(|(idx, _)| &pp.atact_pp.tsw_pp[idx + 1])
+        .sum();
     let pk = &pp.atact_pp.pk;
     let zeta = &cred.zeta;
     let tau = &cred.tau;

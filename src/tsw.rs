@@ -1,7 +1,7 @@
 use std::{
     fmt::Display,
     iter::Sum,
-    ops::{Add, Mul, Sub},
+    ops::{Add, Index, Mul, Sub},
 };
 
 use bls12_381::Scalar;
@@ -27,6 +27,28 @@ impl Display for Error {
 impl Error {
     fn new() -> Self {
         Self {}
+    }
+}
+
+#[derive(Debug)]
+pub struct PublicParameters {
+    hashed_indices: Vec<G1G2>,
+}
+
+impl PublicParameters {
+    pub fn new(l: usize) -> Self {
+        Self {
+            hashed_indices: (0..l).map(hash_usize).collect(),
+        }
+    }
+}
+
+impl Index<usize> for PublicParameters {
+    type Output = G1G2;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        debug_assert!(index < self.hashed_indices.len());
+        &self.hashed_indices[index]
     }
 }
 
@@ -70,8 +92,13 @@ impl SecretKey {
         PublicKey(&pp.g * self.sk)
     }
 
-    pub fn sign_pedersen_commitment(&self, commitment: &Commitment, index: usize) -> Signature {
-        Signature((hash_usize(index) + &commitment.0) * self.sk)
+    pub fn sign_pedersen_commitment(
+        &self,
+        commitment: &Commitment,
+        index: usize,
+        pp: &PublicParameters,
+    ) -> Signature {
+        Signature((&pp[index] + &commitment.0) * self.sk)
     }
 }
 
@@ -97,19 +124,19 @@ impl PublicKey {
         commitment: &Commitment,
         index: usize,
         signature: &Signature,
+        pp: &PublicParameters,
     ) -> Result<(), Error> {
-        let pp = get_parameters();
+        let pedersen_pp = get_parameters();
 
-        let hi = hash_usize(index);
-        let check = hi + &commitment.0;
+        let check = &pp[index] + &commitment.0;
         let lhs = pairing(&check, &self.0);
-        let rhs = pairing(&signature.0, &pp.g);
+        let rhs = pairing(&signature.0, &pedersen_pp.g);
         if lhs != rhs {
             return Err(Error::new());
         }
 
         let lhs = pairing(&self.0, &check);
-        let rhs = pairing(&pp.g, &signature.0);
+        let rhs = pairing(&pedersen_pp.g, &signature.0);
         if lhs == rhs {
             Ok(())
         } else {
@@ -301,6 +328,7 @@ mod test {
 
     #[test]
     fn tsw() {
+        let pp = PublicParameters::new(2);
         let n = 10;
         let t = n / 2 + 1;
 
@@ -309,7 +337,7 @@ mod test {
         let sks = sk.into_shares(n, t);
         let sigs: Vec<_> = sks
             .iter()
-            .map(|sk| sk.sign_pedersen_commitment(&cm, 0))
+            .map(|sk| sk.sign_pedersen_commitment(&cm, 0, &pp))
             .collect();
 
         let lagrange = Lagrange::new(
@@ -323,7 +351,7 @@ mod test {
         assert_eq!(pk, sk.to_public_key());
 
         let sig = Signature::from_shares(&sigs[..t], &lagrange);
-        assert!(pk.verify_pedersen_commitment(&cm, 0, &sig).is_ok());
+        assert!(pk.verify_pedersen_commitment(&cm, 0, &sig, &pp).is_ok());
 
         let lagrange = Lagrange::new(
             (2..=t + 1)
@@ -336,7 +364,7 @@ mod test {
         assert_eq!(other_pk, pk);
 
         let sig = Signature::from_shares(&sigs[1..t + 1], &lagrange);
-        assert!(pk.verify_pedersen_commitment(&cm, 0, &sig).is_ok());
+        assert!(pk.verify_pedersen_commitment(&cm, 0, &sig, &pp).is_ok());
 
         let lagrange = Lagrange::new(
             (1..=n)
@@ -349,20 +377,21 @@ mod test {
         assert_eq!(pk, sk.to_public_key());
 
         let sig = Signature::from_shares(&sigs, &lagrange);
-        assert!(pk.verify_pedersen_commitment(&cm, 0, &sig).is_ok());
+        assert!(pk.verify_pedersen_commitment(&cm, 0, &sig, &pp).is_ok());
     }
 
     #[test]
     fn sw_commitment() {
+        let pp = PublicParameters::new(3);
         let (cm, _) = Commitment::commit(&Scalar::random(rand::thread_rng()));
 
         let sk = SecretKey::new();
         let pk = sk.to_public_key();
         assert!(pk.is_valid());
 
-        let sig = sk.sign_pedersen_commitment(&cm, 1);
-        assert!(pk.verify_pedersen_commitment(&cm, 1, &sig).is_ok());
-        assert!(pk.verify_pedersen_commitment(&cm, 2, &sig).is_err());
+        let sig = sk.sign_pedersen_commitment(&cm, 1, &pp);
+        assert!(pk.verify_pedersen_commitment(&cm, 1, &sig, &pp).is_ok());
+        assert!(pk.verify_pedersen_commitment(&cm, 2, &sig, &pp).is_err());
     }
 
     #[test]
@@ -380,7 +409,8 @@ mod test {
     fn sw_multi_index_commitment() {
         const L: usize = 10;
 
-        let pp = get_parameters();
+        let pedersen_pp = get_parameters();
+        let pp = PublicParameters::new(L);
         let sk = SecretKey::new();
         let pk = sk.to_public_key();
         let multi_pp = MultiBasePublicParameters::new(L);
@@ -395,7 +425,7 @@ mod test {
             .iter()
             .map(|(idx, attribute)| {
                 let (cm, o) = Commitment::index_commit(&value_0, *idx, attribute, &multi_pp);
-                let sigma = sk.sign_pedersen_commitment(&cm, *idx);
+                let sigma = sk.sign_pedersen_commitment(&cm, *idx, &pp);
                 (cm, o, sigma)
             })
             .collect();
@@ -405,10 +435,10 @@ mod test {
         let h = index_attributes
             .iter()
             .map(|(idx, _)| *idx)
-            .fold(G1G2::default(), |h, idx| h + hash_usize(idx));
+            .fold(G1G2::default(), |h, idx| h + &pp[idx]);
 
         let check = h + cm.0;
-        assert_eq!(pairing(&sigma.0, &pp.g), pairing(&check, &pk.0));
-        assert_eq!(pairing(&pp.g, &sigma.0), pairing(&pk.0, &check));
+        assert_eq!(pairing(&sigma.0, &pedersen_pp.g), pairing(&check, &pk.0));
+        assert_eq!(pairing(&pedersen_pp.g, &sigma.0), pairing(&pk.0, &check));
     }
 }

@@ -39,17 +39,19 @@ pub enum Error {
     InvalidProof,
 }
 
-pub struct MultiBasePublicParameters(Vec<G1G2>);
+pub struct MultiBasePublicParameters {
+    us: Vec<G1G2>,
+}
 
 impl MultiBasePublicParameters {
     pub fn new(l: usize) -> Self {
-        Self(
-            (0..l)
+        Self {
+            us: (0..l)
                 .map(|idx| {
                     hash_with_domain_separation(&(idx as u64).to_le_bytes(), b"Multi-Pedersen-PP")
                 })
                 .collect(),
-        )
+        }
     }
 }
 
@@ -58,7 +60,7 @@ impl Index<usize> for MultiBasePublicParameters {
 
     #[inline(always)]
     fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
+        &self.us[index]
     }
 }
 
@@ -308,7 +310,7 @@ impl Commitment {
         value_i: &Scalar,
         multi_pp: &MultiBasePublicParameters,
     ) -> (Commitment, Opening) {
-        debug_assert!(idx < multi_pp.0.len());
+        debug_assert!(idx < multi_pp.us.len());
 
         let r = Scalar::random(rand::thread_rng());
         let pp = get_parameters();
@@ -326,7 +328,7 @@ impl Commitment {
         opening: &Opening,
         multi_pp: &MultiBasePublicParameters,
     ) -> Result<(), Error> {
-        debug_assert!(idx < multi_pp.0.len());
+        debug_assert!(idx < multi_pp.us.len());
 
         let pp = get_parameters();
         if self.0 == &pp.g * opening.r + &pp.u * value_0 + &multi_pp[idx] * value_i {
@@ -427,7 +429,7 @@ impl Commitment {
         let pp = get_parameters();
         let r = Scalar::random(rand::thread_rng());
         let cm = iter.fold(&pp.g * r + &pp.u * value_0, |cm, (idx, value_i)| {
-            debug_assert!(idx < multi_pp.0.len());
+            debug_assert!(idx < multi_pp.us.len());
             cm + &multi_pp[idx] * value_i
         });
 
@@ -446,7 +448,7 @@ impl Commitment {
     {
         let pp = get_parameters();
         let cm = iter.fold(&pp.g * opening.r + &pp.u * value_0, |cm, (idx, value_i)| {
-            debug_assert!(idx < multi_pp.0.len());
+            debug_assert!(idx < multi_pp.us.len());
             cm + &multi_pp[idx] * value_i
         });
 
@@ -516,8 +518,8 @@ impl Commitment {
                 .s_i
                 .iter()
                 .fold(&pp.g * proof.s_1 + &pp.u * proof.s_2, |c, (idx, s_i)| {
-                    hash_g1g2(&mut hasher, &multi_pp.0[*idx]);
-                    c + &multi_pp.0[*idx] * s_i
+                    hash_g1g2(&mut hasher, &multi_pp[*idx]);
+                    c + &multi_pp[*idx] * s_i
                 });
 
         hash_commitment(&mut hasher, self);
