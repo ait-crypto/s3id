@@ -1,11 +1,11 @@
-use bls12_381::Scalar;
+use bls12_381::{Gt, Scalar};
 use group::ff::Field;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{pairing, ByteConverter},
+    bls381_helpers::{pairing_product, ByteConverter},
     lagrange::Lagrange,
     pedersen::{Commitment, Proof2PK},
     tsw::{self, PublicKey, SecretKey, Signature},
@@ -343,10 +343,15 @@ pub fn verify(
     let sk_prod: Signature = (0..pp.tprime)
         .map(|k| &token_proof.ss[k] * pp.lagrange_tprime.eval_j_0(k))
         .sum();
-    if pairing(&token.s.0, &token_proof.pk_prime.0) != pairing(&sk_prod.0, &pp.pk.0) {
+    let sk_prod = -sk_prod.0;
+    if pairing_product(&[(&token.s.0, &token_proof.pk_prime.0), (&sk_prod, &pp.pk.0)])
+        != Gt::identity()
+    {
         errs.push(AtACTError::InvalidToken);
     }
-    if pairing(&token_proof.pk_prime.0, &token.s.0) != pairing(&pp.pk.0, &sk_prod.0) {
+    if pairing_product(&[(&token_proof.pk_prime.0, &token.s.0), (&pp.pk.0, &sk_prod)])
+        != Gt::identity()
+    {
         errs.push(AtACTError::InvalidToken);
     }
 

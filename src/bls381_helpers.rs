@@ -1,11 +1,11 @@
 use std::{
     iter::Sum,
-    ops::{Add, Mul, Sub},
+    ops::{Add, Mul, Neg, Sub},
 };
 
 use bls12_381::{
     hash_to_curve::{ExpandMsgXmd, HashToCurve},
-    G1Affine, G1Projective, G2Affine, G2Projective, Scalar,
+    G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Scalar,
 };
 
 pub trait ByteConverter<const SIZE: usize>: Sized {
@@ -128,6 +128,16 @@ where
     bls12_381::pairing(&g.into(), &h.into())
 }
 
+#[inline]
+pub fn pairing_product(elements: &[(&G1G2, &G1G2)]) -> bls12_381::Gt {
+    let terms: Vec<(G1Affine, G2Prepared)> = elements
+        .iter()
+        .map(|(lhs, rhs)| (lhs.0.into(), G2Prepared::from(G2Affine::from(rhs.1))))
+        .collect();
+    let refs: Vec<_> = terms.iter().map(|(lhs, rhs)| (lhs, rhs)).collect();
+    bls12_381::multi_miller_loop(refs.as_slice()).final_exponentiation()
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct G1G2(pub G1Projective, pub G2Projective);
 
@@ -161,6 +171,22 @@ impl Add<G1G2> for &G1G2 {
     #[inline(always)]
     fn add(self, rhs: G1G2) -> Self::Output {
         rhs + self
+    }
+}
+
+impl Neg for G1G2 {
+    type Output = G1G2;
+
+    fn neg(self) -> Self::Output {
+        Self(-self.0, -self.1)
+    }
+}
+
+impl Neg for &G1G2 {
+    type Output = G1G2;
+
+    fn neg(self) -> Self::Output {
+        G1G2(-self.0, -self.1)
     }
 }
 
@@ -261,5 +287,41 @@ impl From<G1G2> for G2Affine {
 impl From<&G1G2> for G2Affine {
     fn from(value: &G1G2) -> Self {
         value.1.into()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use group::Group;
+
+    use super::*;
+
+    #[test]
+    fn pp() {
+        let mut rng = rand::thread_rng();
+        let lhs1 = G1G2(
+            G1Projective::random(&mut rng),
+            G2Projective::random(&mut rng),
+        );
+        let lhs2 = G1G2(
+            G1Projective::random(&mut rng),
+            G2Projective::random(&mut rng),
+        );
+        let rhs1 = G1G2(
+            G1Projective::random(&mut rng),
+            G2Projective::random(&mut rng),
+        );
+        let rhs2 = G1G2(
+            G1Projective::random(&mut rng),
+            G2Projective::random(&mut rng),
+        );
+
+        let check = pairing(&lhs1, &rhs1) + pairing(&lhs2, &rhs2);
+        let pp = pairing_product(&[(&lhs1, &rhs1), (&lhs2, &rhs2)]);
+        assert_eq!(check, pp);
+
+        let check = pairing(&lhs1, &rhs1) - pairing(&lhs2, &rhs2);
+        let pp = pairing_product(&[(&lhs1, &rhs1), (&-lhs2, &rhs2)]);
+        assert_eq!(check, pp);
     }
 }

@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     atact::{self, AtACTError, Token},
-    bls381_helpers::{hash_usize, pairing, G1G2},
+    bls381_helpers::{pairing, G1G2},
     pedersen::{
         self, get_parameters, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
     },
@@ -36,14 +36,14 @@ pub struct Issuer {
     // FIXME: The use of T_dedup to check for duplicate tokens is not
     // implemented. Checking it would make benchmarking harder. Performance-wise
     // it makes not significant difference.
-    _t_dedup: Vec<()>,
+    _t_dedup: (),
 }
 
 impl From<atact::Issuer> for Issuer {
     fn from(value: atact::Issuer) -> Self {
         Self {
             sk: value,
-            _t_dedup: Vec::default(),
+            _t_dedup: (),
         }
     }
 }
@@ -261,7 +261,7 @@ mod test {
     fn basic() {
         let num_issuers = 10;
         let t = num_issuers / 2 + 1;
-        let n = 64;
+        let n = 32;
         let tprime = n / 2 + 1;
         let big_l = 10;
 

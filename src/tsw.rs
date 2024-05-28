@@ -4,13 +4,13 @@ use std::{
     ops::{Add, Index, Mul, Sub},
 };
 
-use bls12_381::Scalar;
+use bls12_381::{Gt, Scalar};
 use group::ff::Field;
 use rand::thread_rng;
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{hash_usize, pairing, G1G2},
+    bls381_helpers::{hash_usize, pairing_product, G1G2},
     lagrange::Lagrange,
     pedersen::{get_parameters, Commitment},
 };
@@ -128,16 +128,12 @@ impl PublicKey {
     ) -> Result<(), Error> {
         let pedersen_pp = get_parameters();
 
-        let check = &pp[index] + &commitment.0;
-        let lhs = pairing(&check, &self.0);
-        let rhs = pairing(&signature.0, &pedersen_pp.g);
-        if lhs != rhs {
-            return Err(Error::new());
-        }
+        let check = -(&pp[index] + &commitment.0);
 
-        let lhs = pairing(&self.0, &check);
-        let rhs = pairing(&pedersen_pp.g, &signature.0);
-        if lhs == rhs {
+        if pairing_product(&[(&check, &self.0), (&signature.0, &pedersen_pp.g)]) == Gt::identity()
+            && pairing_product(&[(&self.0, &check), (&pedersen_pp.g, &signature.0)])
+                == Gt::identity()
+        {
             Ok(())
         } else {
             Err(Error::new())
@@ -161,7 +157,7 @@ impl Signature {
 impl PublicKey {
     pub fn is_valid(&self) -> bool {
         let pp = get_parameters();
-        pairing(&self.0, &pp.g) == pairing(&pp.g, &self.0)
+        pairing_product(&[(&-&self.0, &pp.g), (&pp.g, &self.0)]) == Gt::identity()
     }
 }
 
@@ -322,7 +318,7 @@ impl<'a> Sum<&'a Signature> for Signature {
 
 #[cfg(test)]
 mod test {
-    use crate::pedersen::MultiBasePublicParameters;
+    use crate::{bls381_helpers::pairing, pedersen::MultiBasePublicParameters};
 
     use super::*;
 
