@@ -4,13 +4,11 @@ use std::{
     sync::OnceLock,
 };
 
-use bls12_381::Scalar;
-use group::ff::Field;
 // use sha3::{Digest, Sha3_512 as Hasher};
 use sha2::{Digest, Sha512 as Hasher};
 use thiserror::Error;
 
-use crate::bls381_helpers::{hash_with_domain_separation, ByteConverter, G1G2};
+use crate::bls381_helpers::{hash_with_domain_separation, ByteConverter, Field, Scalar, G1G2};
 
 pub struct PublicParameters {
     pub g: G1G2,

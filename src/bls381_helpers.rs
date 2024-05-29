@@ -3,10 +3,9 @@ use std::{
     ops::{Add, Mul, Neg, Sub},
 };
 
-use bls12_381::{
-    hash_to_curve::{ExpandMsgXmd, HashToCurve},
-    G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Scalar,
-};
+use bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
+pub use bls12_381::{G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar};
+pub use group::{ff::Field, Group};
 
 pub trait ByteConverter<const SIZE: usize>: Sized {
     type Error;

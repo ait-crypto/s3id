@@ -6,3 +6,5 @@ mod lagrange;
 pub mod pedersen;
 pub mod s3id;
 pub mod tsw;
+
+pub use bls381_helpers::{Field, Scalar};

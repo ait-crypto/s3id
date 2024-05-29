@@ -1,7 +1,5 @@
-use bls12_381::Scalar;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use group::ff::Field;
-use s3id::s3id::*;
+use s3id::{s3id::*, Field, Scalar};
 
 fn bench_s3id(
     c: &mut Criterion,

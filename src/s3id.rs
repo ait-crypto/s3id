@@ -1,12 +1,10 @@
-use bls12_381::Scalar;
-use group::ff::Field;
 use rand::thread_rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use thiserror::Error;
 
 use crate::{
     atact::{self, AtACTError, Token},
-    bls381_helpers::{pairing, G1G2},
+    bls381_helpers::{pairing, Field, Scalar, G1G2},
     pedersen::{
         self, get_parameters, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
     },

@@ -1,11 +1,9 @@
-use bls12_381::{Gt, Scalar};
-use group::ff::Field;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{pairing_product, ByteConverter},
+    bls381_helpers::{pairing_product, ByteConverter, Field, Gt, Scalar},
     lagrange::Lagrange,
     pedersen::{Commitment, Proof2PK},
     tsw::{self, PublicKey, SecretKey, Signature},

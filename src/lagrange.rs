@@ -1,7 +1,6 @@
 use std::{iter::Sum, ops::Mul};
 
-use bls12_381::Scalar;
-use group::ff::Field;
+pub use crate::bls381_helpers::{Field, Scalar};
 
 pub type Lagrange = GenericLagrange<Scalar>;
 

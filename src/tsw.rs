@@ -4,13 +4,11 @@ use std::{
     ops::{Add, Index, Mul, Sub},
 };
 
-use bls12_381::{Gt, Scalar};
-use group::ff::Field;
 use rand::thread_rng;
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{hash_usize, pairing_product, G1G2},
+    bls381_helpers::{hash_usize, pairing_product, Field, Gt, Scalar, G1G2},
     lagrange::Lagrange,
     pedersen::{get_parameters, Commitment},
 };

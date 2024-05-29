@@ -1,7 +1,5 @@
-use bls12_381::Scalar;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use group::ff::Field;
-use s3id::atact::*;
+use s3id::{atact::*, Field, Scalar};
 
 fn bench_atact(c: &mut Criterion, num_issuers: usize, n: usize, t: usize, tprime: usize) {
     let mut c = c.benchmark_group(format!("(N, n, t, t') = {:?}", (num_issuers, n, t, tprime)));
