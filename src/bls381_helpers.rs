@@ -119,7 +119,7 @@ pub fn hash_usize(size: usize) -> G1G2 {
 }
 
 #[inline]
-pub fn pairing<G1, G2>(g: G1, h: G2) -> bls12_381::Gt
+pub fn pairing<G1, G2>(g: G1, h: G2) -> Gt
 where
     G1: Into<G1Affine>,
     G2: Into<G2Affine>,
@@ -128,7 +128,7 @@ where
 }
 
 #[inline]
-pub fn pairing_product(elements: &[(&G1G2, &G1G2)]) -> bls12_381::Gt {
+pub fn pairing_product(elements: &[(&G1G2, &G1G2)]) -> Gt {
     let terms: Vec<(G1Affine, G2Prepared)> = elements
         .iter()
         .map(|(lhs, rhs)| (lhs.0.into(), G2Prepared::from(G2Affine::from(rhs.1))))
