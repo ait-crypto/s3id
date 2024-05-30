@@ -15,9 +15,6 @@ pub type G2Affine = <Bls12_381 as PairingEngine>::G2Affine;
 pub type G2Projective = <Bls12_381 as PairingEngine>::G2Projective;
 pub type Gt = <Bls12_381 as PairingEngine>::Fqk;
 pub type Scalar = <Bls12_381 as PairingEngine>::Fr;
-pub type CRS = groth_sahai::CRS<Bls12_381>;
-pub type PPE = groth_sahai::statement::PPE<Bls12_381>;
-pub type CProof = groth_sahai::prover::CProof<Bls12_381>;
 
 #[inline]
 fn hash_with_domain_separation_1(msg: &[u8], domain_separator: &[u8]) -> G1Projective {
@@ -65,7 +62,7 @@ pub fn pairing_product(elements: &[(&G1G2, &G1G2)]) -> Gt {
 
     Bls12_381::product_of_pairings(
         elements
-            .into_iter()
+            .iter()
             .map(|(lhs, rhs)| {
                 (
                     G1Prepared::from(G1Affine::from(lhs.0)),

@@ -196,7 +196,7 @@ pub struct Credential {
 pub struct Proof {
     pi: ProofMultiIndex,
     gs_pi_1: CProof,
-    gs_pi_2: CProof,
+    // gs_pi_2: CProof,
 }
 
 pub fn appcred(
@@ -251,31 +251,21 @@ pub fn appcred(
     let g1_1_vars = vec![zeta.0 .0.into()];
     let g2_2_vars = vec![zeta.0 .1.into()];
 
-    let g1_1_consts = vec![G1Affine::zero()];
     let g1_2_consts = vec![pp2.g.0.into()];
     let g2_1_consts = vec![pp2.g.1.into()];
-    let g2_2_consts = vec![G2Affine::zero()];
 
     let gamma: Matrix<_> = vec![vec![], vec![]];
 
-    // Target -> all together (n.b. e(X_1, Y_1)^5 = e(X_1, 5 Y_1) = e(5 X_1, Y_1) by the properties of non-degenerate bilinear maps)
-    let target = pairing(&zeta.0, &pp2.g);
+    let target_1 = pairing(&zeta.0, &pp2.g);
+    let target_2 = pairing(&pp2.g, &zeta.0);
 
     let equ_1 = PPE {
-        a_consts: g1_1_consts,
+        a_consts: g1_2_consts,
         b_consts: g2_1_consts,
         gamma: gamma.clone(),
-        target,
+        target: target_1 * target_2,
     };
-    let equ_2 = PPE {
-        a_consts: g1_2_consts,
-        b_consts: g2_2_consts,
-        gamma,
-        target,
-    };
-
-    let gs_pi_1 = equ_1.commit_and_prove(&g1_1_vars, &Vec::new(), &pp.crs, &mut rng);
-    let gs_pi_2 = equ_2.commit_and_prove(&Vec::new(), &g2_2_vars, &pp.crs, &mut rng);
+    let gs_pi_1 = equ_1.commit_and_prove(&g1_1_vars, &g2_2_vars, &pp.crs, &mut rng);
     // assert!(equ.verify(&proof, &crs));
 
     Ok((
@@ -287,7 +277,7 @@ pub fn appcred(
         Proof {
             pi,
             gs_pi_1,
-            gs_pi_2,
+            // gs_pi_2,
         },
     ))
 }

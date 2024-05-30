@@ -5,7 +5,7 @@ use sha3::digest::{ExtendableOutput, Update, XofReader};
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{pairing_product, Gt, Scalar},
+    bls381_helpers::{pairing_product, Scalar},
     lagrange::Lagrange,
     pedersen::{Commitment, Proof2PK},
     tsw::{self, PublicKey, SecretKey, Signature},
@@ -222,8 +222,8 @@ pub struct Token {
 impl Token {
     pub fn hash_prime(&self, pp: &PublicParameters) -> Vec<usize> {
         let mut buffer = Vec::new();
-        self.s.0 .0.serialize_uncompressed(&mut buffer);
-        self.s.0 .1.serialize_uncompressed(&mut buffer);
+        self.s.0 .0.serialize_uncompressed(&mut buffer).unwrap();
+        self.s.0 .1.serialize_uncompressed(&mut buffer).unwrap();
         let mut hasher = sha3::Shake256::default();
         hasher.update(&buffer);
         let mut reader = hasher.finalize_xof();
