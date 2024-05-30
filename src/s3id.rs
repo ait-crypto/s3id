@@ -1,20 +1,27 @@
+use ark_ec::ProjectiveCurve;
+use ark_ff::{field_new, Zero};
+use groth_sahai::{prover::Provable, AbstractCrs, Matrix};
 use rand::thread_rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use thiserror::Error;
 
 use crate::{
     atact::{self, AtACTError, Token},
-    bls381_helpers::{pairing, Field, Scalar, G1G2},
+    bls381_helpers::{
+        gs::{self, CProof, CRS, GSG1G2, PPE},
+        pairing, Field, Scalar, G1G2,
+    },
     pedersen::{
         self, get_parameters, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
     },
-    tsw::Signature,
+    tsw::{PublicKey, Signature},
 };
 
 pub struct PublicParameters {
     atact_pp: atact::PublicParameters,
     pedersen_pp: MultiBasePublicParameters,
     big_l: usize,
+    crs: CRS,
 }
 
 #[derive(Debug, Error, PartialEq)]
@@ -55,12 +62,14 @@ pub fn setup(
 ) -> Result<(PublicParameters, Vec<Issuer>), S3IDError> {
     let (atact_pp, issuers) = atact::setup(num_issuers, n, t, tprime, big_l + 1)?;
     let pedersen_pp = MultiBasePublicParameters::new(big_l);
+    let crs = CRS::generate_crs(&mut thread_rng());
 
     Ok((
         PublicParameters {
             atact_pp,
             pedersen_pp,
             big_l,
+            crs,
         },
         issuers.into_iter().map(Into::into).collect(),
     ))
@@ -182,9 +191,14 @@ pub fn microcred(
 pub struct Credential {
     zeta: Signature,
     tau: Commitment,
+    pk_prime: PublicKey,
 }
 
-pub type Proof = ProofMultiIndex;
+pub struct Proof {
+    pi: ProofMultiIndex,
+    gs_pi_1: CProof,
+    gs_pi_2: CProof,
+}
 
 pub fn appcred(
     attributes: &[Scalar],
@@ -193,7 +207,9 @@ pub fn appcred(
     _msg: &[u8],
     attribute_subset: &[Scalar],
     pp: &PublicParameters,
-) -> Result<(Credential, ProofMultiIndex), S3IDError> {
+) -> Result<(Credential, Proof), S3IDError> {
+    let mut rng = thread_rng();
+
     let q: Vec<_> = attribute_subset
         .iter()
         .map(|attribute| {
@@ -209,17 +225,75 @@ pub fn appcred(
         q.iter().map(|idx| (*idx, attributes[*idx])),
         &pp.pedersen_pp,
     );
+
+    let r_prime = Scalar::random(&mut rng);
+    let pk_prime = &pp.atact_pp.pk * r_prime;
+
     let zeta = q.iter().map(|idx| &signatures[*idx]).sum::<Signature>()
         + (&pp.atact_pp.pk * tau_opening.as_ref());
+    let zeta = zeta * r_prime;
 
     let pi = tau.proof_multi_index_commit(
         &prv_u.k,
         q.iter().map(|idx| (*idx, attributes[*idx])),
         &tau_opening,
+        &pp.atact_pp.pk.0,
+        &pk_prime.0,
+        &r_prime,
         &pp.pedersen_pp,
     );
 
-    Ok((Credential { zeta, tau }, pi))
+    // equation:
+    // e(zeta, g) = t
+    // e(g, zeta) = t
+
+    let gs_zeta = GSG1G2::from(&zeta.0);
+    let pp2 = get_parameters();
+    let gs_g = GSG1G2::from(&pp2.g);
+
+    let g1_1_vars = vec![gs_zeta.0.into_affine()];
+    let g2_2_vars = vec![gs_zeta.1.into_affine()];
+
+    let g1_1_consts = vec![gs::G1Affine::zero()];
+    let g1_2_consts = vec![gs_g.0.into_affine()];
+    let g2_1_consts = vec![gs_g.1.into_affine()];
+    let g2_2_consts = vec![gs::G2Affine::zero()];
+
+    type GSScalar = gs::Scalar;
+    let gamma: Matrix<_> = vec![vec![], vec![]];
+
+    // Target -> all together (n.b. e(X_1, Y_1)^5 = e(X_1, 5 Y_1) = e(5 X_1, Y_1) by the properties of non-degenerate bilinear maps)
+    let target = gs::pairing(&gs_zeta, &gs_g);
+
+    let equ_1 = PPE {
+        a_consts: g1_1_consts,
+        b_consts: g2_1_consts,
+        gamma: gamma.clone(),
+        target,
+    };
+    let equ_2 = PPE {
+        a_consts: g1_2_consts,
+        b_consts: g2_2_consts,
+        gamma,
+        target,
+    };
+
+    let gs_pi_1 = equ_1.commit_and_prove(&g1_1_vars, &Vec::new(), &pp.crs, &mut rng);
+    let gs_pi_2 = equ_2.commit_and_prove(&Vec::new(), &g2_2_vars, &pp.crs, &mut rng);
+    // assert!(equ.verify(&proof, &crs));
+
+    Ok((
+        Credential {
+            zeta,
+            tau,
+            pk_prime,
+        },
+        Proof {
+            pi,
+            gs_pi_1,
+            gs_pi_2,
+        },
+    ))
 }
 
 pub fn verifycred(
@@ -228,10 +302,15 @@ pub fn verifycred(
     _msg: &[u8],
     pp: &PublicParameters,
 ) -> Result<(), S3IDError> {
-    cred.tau
-        .verify_proof_multi_index_commit(pi, &pp.pedersen_pp)?;
+    cred.tau.verify_proof_multi_index_commit(
+        &pp.atact_pp.pk.0,
+        &cred.pk_prime.0,
+        &pi.pi,
+        &pp.pedersen_pp,
+    )?;
 
     let h: G1G2 = pi
+        .pi
         .s_i
         .iter()
         .map(|(idx, _)| &pp.atact_pp.tsw_pp[idx + 1])

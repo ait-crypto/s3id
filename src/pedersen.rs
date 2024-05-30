@@ -115,7 +115,9 @@ pub struct ProofMultiIndex {
     t: G1G2,
     s_1: Scalar,
     s_2: Scalar,
-    pub s_i: Vec<(usize, Scalar)>,
+    pub(crate) s_i: Vec<(usize, Scalar)>,
+    t_pk: G1G2,
+    s_pk: Scalar,
 }
 
 #[inline]
@@ -463,6 +465,9 @@ impl Commitment {
         value_0: &Scalar,
         iter: I,
         opening: &Opening,
+        pk: &G1G2,
+        pk_prime: &G1G2,
+        r_prime: &Scalar,
         multi_pp: &MultiBasePublicParameters,
     ) -> ProofMultiIndex
     where
@@ -473,7 +478,10 @@ impl Commitment {
         let mut rng = rand::thread_rng();
         let r1 = Scalar::random(&mut rng);
         let r2 = Scalar::random(&mut rng);
+        let r3 = Scalar::random(&mut rng);
         let mut hasher = hash_context();
+
+        let t_pk = pk * r3;
 
         let (t, randoms_and_values) = iter.fold(
             (&pp.g * r1 + &pp.u * r2, randoms_and_values),
@@ -484,13 +492,16 @@ impl Commitment {
                 (t + &multi_pp[idx] * random, randoms_and_values)
             },
         );
-
+        hash_g1g2(&mut hasher, pk);
         hash_commitment(&mut hasher, self);
+        hash_g1g2(&mut hasher, pk_prime);
         hash_g1g2(&mut hasher, &t);
+        hash_g1g2(&mut hasher, &t_pk);
         let c = hash_extract_scalar(hasher);
 
         let s_1 = r1 + opening.r * c;
         let s_2 = r2 + value_0 * c;
+        let s_pk = r3 + r_prime * c;
 
         ProofMultiIndex {
             t,
@@ -500,18 +511,22 @@ impl Commitment {
                 .into_iter()
                 .map(|(idx, r_i, value_i)| (idx, r_i + value_i * c))
                 .collect(),
+            t_pk,
+            s_pk,
         }
     }
 
     pub fn verify_proof_multi_index_commit(
         &self,
+        pk: &G1G2,
+        pk_prime: &G1G2,
         proof: &ProofMultiIndex,
         multi_pp: &MultiBasePublicParameters,
     ) -> Result<(), Error> {
         let mut hasher = hash_context();
         let pp = get_parameters();
 
-        let check =
+        let check_1 =
             proof
                 .s_i
                 .iter()
@@ -520,11 +535,14 @@ impl Commitment {
                     c + &multi_pp[*idx] * s_i
                 });
 
+        hash_g1g2(&mut hasher, pk);
         hash_commitment(&mut hasher, self);
+        hash_g1g2(&mut hasher, pk_prime);
         hash_g1g2(&mut hasher, &proof.t);
+        hash_g1g2(&mut hasher, &proof.t_pk);
         let c = hash_extract_scalar(hasher);
 
-        if check == &self.0 * c + &proof.t {
+        if check_1 == &self.0 * c + &proof.t && pk * proof.s_pk == pk_prime * c + &proof.t_pk {
             Ok(())
         } else {
             Err(Error::InvalidProof)
@@ -707,7 +725,21 @@ mod test {
             .verify_multi_index_commit(&value_0, values.iter().copied(), &o, &pp)
             .is_ok());
 
-        let proof = cm.proof_multi_index_commit(&value_0, values.iter().copied(), &o, &pp);
-        assert!(cm.verify_proof_multi_index_commit(&proof, &pp).is_ok());
+        let pk = get_parameters().g.clone();
+        let rprime = Scalar::random(rand::thread_rng());
+        let pk_prime = &pk * rprime;
+
+        let proof = cm.proof_multi_index_commit(
+            &value_0,
+            values.iter().copied(),
+            &o,
+            &pk,
+            &pk_prime,
+            &rprime,
+            &pp,
+        );
+        assert!(cm
+            .verify_proof_multi_index_commit(&pk, &pk_prime, &proof, &pp)
+            .is_ok());
     }
 }

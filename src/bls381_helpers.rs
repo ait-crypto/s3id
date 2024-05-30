@@ -6,6 +6,7 @@ use std::{
 use bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
 pub use bls12_381::{G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar};
 pub use group::{ff::Field, Group};
+use rand::RngCore;
 
 pub trait ByteConverter<const SIZE: usize>: Sized {
     type Error;
@@ -139,6 +140,15 @@ pub fn pairing_product(elements: &[(&G1G2, &G1G2)]) -> Gt {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct G1G2(pub G1Projective, pub G2Projective);
+
+impl G1G2 {
+    pub fn random(mut rng: impl RngCore) -> Self {
+        Self(
+            G1Projective::random(&mut rng),
+            G2Projective::random(&mut rng),
+        )
+    }
+}
 
 impl Add for G1G2 {
     type Output = G1G2;
@@ -322,5 +332,67 @@ mod test {
         let check = pairing(&lhs1, &rhs1) - pairing(&lhs2, &rhs2);
         let pp = pairing_product(&[(&lhs1, &rhs1), (&-lhs2, &rhs2)]);
         assert_eq!(check, pp);
+    }
+}
+
+pub mod gs {
+    use ark_bls12_381::Bls12_381;
+    use ark_ec::{AffineCurve, PairingEngine};
+    use ark_ff::{bytes::FromBytes, Zero};
+    use ark_serialize::CanonicalDeserialize;
+
+    use super::ByteConverter;
+
+    pub type G1Affine = <Bls12_381 as PairingEngine>::G1Affine;
+    pub type G1Projective = <Bls12_381 as PairingEngine>::G1Projective;
+    pub type G2Affine = <Bls12_381 as PairingEngine>::G2Affine;
+    pub type G2Projective = <Bls12_381 as PairingEngine>::G2Projective;
+    pub type Gt = <Bls12_381 as PairingEngine>::Fqk;
+    pub type Scalar = <Bls12_381 as PairingEngine>::Fr;
+    pub type CRS = groth_sahai::CRS<Bls12_381>;
+    pub type PPE = groth_sahai::statement::PPE<Bls12_381>;
+    pub type CProof = groth_sahai::prover::CProof<Bls12_381>;
+
+    pub struct GSG1G2(pub(crate) G1Projective, pub(crate) G2Projective);
+
+    impl From<&super::G1G2> for GSG1G2 {
+        fn from(value: &super::G1G2) -> Self {
+            let g1 = if value.0.is_identity().unwrap_u8() == 1 {
+                G1Affine::zero()
+            } else {
+                let mut g1_bytes = value.0.as_serde_bytes().to_vec();
+                // g1_bytes.push(0);
+                // G1Affine::read(g1_bytes.as_slice()).unwrap()
+                G1Affine::deserialize_uncompressed(g1_bytes.as_slice()).unwrap()
+            };
+
+            let g2 = if value.1.is_identity().unwrap_u8() == 1 {
+                G2Affine::zero()
+            } else {
+                let mut g2_bytes = value.1.as_serde_bytes().to_vec();
+                // g2_bytes.push(0);
+                // G2Affine::read(g2_bytes.as_slice()).unwrap()
+                G2Affine::deserialize_uncompressed(g2_bytes.as_slice()).unwrap()
+            };
+
+            Self(g1.into_projective(), g2.into_projective())
+        }
+    }
+
+    pub fn pairing(lhs: &GSG1G2, rhs: &GSG1G2) -> Gt {
+        Bls12_381::pairing(lhs.0, rhs.1)
+    }
+
+    #[cfg(test)]
+    mod test {
+        use crate::bls381_helpers::G1G2;
+
+        use super::GSG1G2;
+
+        #[test]
+        fn conversion() {
+            let g1g2 = G1G2::random(rand::thread_rng());
+            let _ = GSG1G2::from(&g1g2);
+        }
     }
 }
