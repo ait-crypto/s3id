@@ -4,11 +4,14 @@ use std::{
     sync::OnceLock,
 };
 
+use ark_ff::{Field, UniformRand};
+use ark_serialize::CanonicalSerialize;
+use rand::{RngCore, SeedableRng};
 // use sha3::{Digest, Sha3_512 as Hasher};
-use sha2::{Digest, Sha512 as Hasher};
+use sha2::{digest::consts::U32, Digest, Sha256 as Hasher};
 use thiserror::Error;
 
-use crate::bls381_helpers::{hash_with_domain_separation, ByteConverter, Field, Scalar, G1G2};
+use crate::bls381_helpers::{hash_with_domain_separation, Scalar, G1G2};
 
 pub struct PublicParameters {
     pub g: G1G2,
@@ -66,19 +69,7 @@ impl Index<usize> for MultiBasePublicParameters {
 pub struct Commitment(pub(crate) G1G2);
 
 pub struct Opening {
-    r: Scalar,
-}
-
-impl From<&Scalar> for Opening {
-    fn from(value: &Scalar) -> Self {
-        Self { r: *value }
-    }
-}
-
-impl From<Scalar> for Opening {
-    fn from(r: Scalar) -> Self {
-        Self { r }
-    }
+    pub(crate) r: Scalar,
 }
 
 impl AsRef<Scalar> for Opening {
@@ -125,8 +116,10 @@ fn hash_g1g2<D>(hasher: &mut D, g12: &G1G2)
 where
     D: Digest,
 {
-    hasher.update(g12.0.as_serde_bytes());
-    hasher.update(g12.1.as_serde_bytes());
+    let mut storage = Vec::new();
+    g12.0.serialize_uncompressed(&mut storage).unwrap();
+    g12.1.serialize_uncompressed(&mut storage).unwrap();
+    hasher.update(storage);
 }
 
 #[inline]
@@ -151,10 +144,19 @@ where
 #[inline]
 fn hash_extract_scalar<D>(hasher: D) -> Scalar
 where
-    D: Digest,
+    D: Digest<OutputSize = U32>,
 {
+    // FIXME!
     let digest = hasher.finalize();
-    Scalar::from_bytes_wide(&digest.as_slice().try_into().unwrap())
+
+    let mut rng = rand_chacha::ChaCha20Rng::from_seed(digest.into());
+    loop {
+        let mut bytes = [0u8; 32];
+        rng.fill_bytes(&mut bytes);
+        if let Some(scalar) = Scalar::from_random_bytes(&bytes) {
+            return scalar;
+        }
+    }
 }
 
 fn hash_context() -> Hasher {
@@ -178,17 +180,17 @@ fn hash_pedersen_proof(commitment: &Commitment, t: &G1G2) -> Scalar {
 
 impl Commitment {
     pub fn commit(message: &Scalar) -> (Commitment, Opening) {
-        Self::commit_with_randomness(message, &Scalar::random(rand::thread_rng()))
+        Self::commit_with_randomness(message, &Scalar::rand(&mut rand::thread_rng()))
     }
 
     pub fn commit_with_randomness(message: &Scalar, r: &Scalar) -> (Commitment, Opening) {
         let pp = get_parameters();
-        (Commitment(&pp.g * r + &pp.u * message), Opening { r: *r })
+        (Commitment(&pp.g * *r + &pp.u * *message), Opening { r: *r })
     }
 
     pub fn verify(&self, message: &Scalar, opening: &Opening) -> Result<(), Error> {
         let pp = get_parameters();
-        if &pp.g * opening.r + &pp.u * message == self.0 {
+        if &pp.g * opening.r + &pp.u * *message == self.0 {
             Ok(())
         } else {
             Err(Error::InvalidOpening)
@@ -199,20 +201,20 @@ impl Commitment {
         let mut rng = rand::thread_rng();
         let pp = get_parameters();
 
-        let r_1 = Scalar::random(&mut rng);
-        let r_2 = Scalar::random(&mut rng);
+        let r_1 = Scalar::rand(&mut rng);
+        let r_2 = Scalar::rand(&mut rng);
         let t = &pp.g * r_1 + &pp.u * r_2;
 
         let c = hash_pedersen_proof(self, &t);
         let s_1 = r_1 + opening.r * c;
-        let s_2 = r_2 + message * c;
+        let s_2 = r_2 + *message * c;
 
         Proof { t, s_1, s_2 }
     }
 
     fn verify_proof_with_challenge(&self, c: &Scalar, proof: &Proof) -> Result<(), Error> {
         let pp = get_parameters();
-        if &pp.g * proof.s_1 + &pp.u * proof.s_2 != &self.0 * c + &proof.t {
+        if &pp.g * proof.s_1 + &pp.u * proof.s_2 != &self.0 * *c + &proof.t {
             return Err(Error::InvalidProof);
         }
         Ok(())
@@ -237,12 +239,12 @@ impl Commitment {
         let pp = get_parameters();
         let mut rng = rand::thread_rng();
 
-        let r1_1 = Scalar::random(&mut rng);
-        let r1_2 = Scalar::random(&mut rng);
+        let r1_1 = Scalar::rand(&mut rng);
+        let r1_2 = Scalar::rand(&mut rng);
         let t1 = &pp.g * r1_1 + &pp.u * r1_2;
 
-        let r2_1 = Scalar::random(&mut rng);
-        let r2_2 = Scalar::random(&mut rng);
+        let r2_1 = Scalar::rand(&mut rng);
+        let r2_2 = Scalar::rand(&mut rng);
         let t2 = &pp.g * r2_1 + &pp.u * r2_2;
 
         let t3 = base * r2_2;
@@ -258,9 +260,9 @@ impl Commitment {
         let c = hash_extract_scalar(hasher);
 
         let s1_1 = r1_1 + opening.r * c;
-        let s1_2 = r1_2 + message * c;
+        let s1_2 = r1_2 + *message * c;
         let s2_1 = r2_1 + opening_2.r * c;
-        let s2_2 = r2_2 + message_2 * c;
+        let s2_2 = r2_2 + *message_2 * c;
 
         Proof2PK {
             pi_1: Proof {
@@ -312,10 +314,10 @@ impl Commitment {
     ) -> (Commitment, Opening) {
         debug_assert!(idx < multi_pp.us.len());
 
-        let r = Scalar::random(rand::thread_rng());
+        let r = Scalar::rand(&mut rand::thread_rng());
         let pp = get_parameters();
         (
-            Commitment(&pp.g * r + &pp.u * value_0 + &multi_pp[idx] * value_i),
+            Commitment(&pp.g * r + &pp.u * *value_0 + &multi_pp[idx] * *value_i),
             Opening { r },
         )
     }
@@ -331,7 +333,7 @@ impl Commitment {
         debug_assert!(idx < multi_pp.us.len());
 
         let pp = get_parameters();
-        if self.0 == &pp.g * opening.r + &pp.u * value_0 + &multi_pp[idx] * value_i {
+        if self.0 == &pp.g * opening.r + &pp.u * *value_0 + &multi_pp[idx] * *value_i {
             Ok(())
         } else {
             Err(Error::InvalidOpening)
@@ -353,13 +355,13 @@ impl Commitment {
         let pp = get_parameters();
         let mut rng = rand::thread_rng();
 
-        let r1_1 = Scalar::random(&mut rng);
-        let r1_2 = Scalar::random(&mut rng);
+        let r1_1 = Scalar::rand(&mut rng);
+        let r1_2 = Scalar::rand(&mut rng);
         let t1 = &pp.g * r1_1 + &pp.u * r1_2;
 
-        let r2_1 = Scalar::random(&mut rng);
-        let r2_2 = Scalar::random(&mut rng);
-        let r2_3 = Scalar::random(&mut rng);
+        let r2_1 = Scalar::rand(&mut rng);
+        let r2_2 = Scalar::rand(&mut rng);
+        let r2_3 = Scalar::rand(&mut rng);
         let t2 = &pp.g * r2_1 + &pp.u * r2_2 + &multi_pp[idx] * r2_3;
 
         let mut hasher = hash_context();
@@ -371,10 +373,10 @@ impl Commitment {
         let c = hash_extract_scalar(hasher);
 
         let s1_1 = r1_1 + opening.r * c;
-        let s1_2 = r1_2 + message * c;
+        let s1_2 = r1_2 + *message * c;
         let s2_1 = r2_1 + opening_2.r * c;
-        let s2_2 = r2_2 + value_0 * c;
-        let s2_3 = r2_3 + value_i * c;
+        let s2_2 = r2_2 + *value_0 * c;
+        let s2_3 = r2_3 + *value_i * c;
 
         ProofMultiBase {
             pi_1: Proof {
@@ -427,8 +429,8 @@ impl Commitment {
         I: Iterator<Item = (usize, Scalar)>,
     {
         let pp = get_parameters();
-        let r = Scalar::random(rand::thread_rng());
-        let cm = iter.fold(&pp.g * r + &pp.u * value_0, |cm, (idx, value_i)| {
+        let r = Scalar::rand(&mut rand::thread_rng());
+        let cm = iter.fold(&pp.g * r + &pp.u * *value_0, |cm, (idx, value_i)| {
             debug_assert!(idx < multi_pp.us.len());
             cm + &multi_pp[idx] * value_i
         });
@@ -447,10 +449,13 @@ impl Commitment {
         I: Iterator<Item = (usize, Scalar)>,
     {
         let pp = get_parameters();
-        let cm = iter.fold(&pp.g * opening.r + &pp.u * value_0, |cm, (idx, value_i)| {
-            debug_assert!(idx < multi_pp.us.len());
-            cm + &multi_pp[idx] * value_i
-        });
+        let cm = iter.fold(
+            &pp.g * opening.r + &pp.u * *value_0,
+            |cm, (idx, value_i)| {
+                debug_assert!(idx < multi_pp.us.len());
+                cm + &multi_pp[idx] * value_i
+            },
+        );
 
         if self.0 == cm {
             Ok(())
@@ -476,9 +481,9 @@ impl Commitment {
         let pp = get_parameters();
         let randoms_and_values = Vec::with_capacity(iter.len());
         let mut rng = rand::thread_rng();
-        let r1 = Scalar::random(&mut rng);
-        let r2 = Scalar::random(&mut rng);
-        let r3 = Scalar::random(&mut rng);
+        let r1 = Scalar::rand(&mut rng);
+        let r2 = Scalar::rand(&mut rng);
+        let r3 = Scalar::rand(&mut rng);
         let mut hasher = hash_context();
 
         let t_pk = pk * r3;
@@ -486,7 +491,7 @@ impl Commitment {
         let (t, randoms_and_values) = iter.fold(
             (&pp.g * r1 + &pp.u * r2, randoms_and_values),
             |(t, mut randoms_and_values), (idx, value_i)| {
-                let random = Scalar::random(&mut rng);
+                let random = Scalar::rand(&mut rng);
                 randoms_and_values.push((idx, random, value_i));
                 hash_g1g2(&mut hasher, &multi_pp[idx]);
                 (t + &multi_pp[idx] * random, randoms_and_values)
@@ -500,8 +505,8 @@ impl Commitment {
         let c = hash_extract_scalar(hasher);
 
         let s_1 = r1 + opening.r * c;
-        let s_2 = r2 + value_0 * c;
-        let s_pk = r3 + r_prime * c;
+        let s_2 = r2 + *value_0 * c;
+        let s_pk = r3 + *r_prime * c;
 
         ProofMultiIndex {
             t,
@@ -532,7 +537,7 @@ impl Commitment {
                 .iter()
                 .fold(&pp.g * proof.s_1 + &pp.u * proof.s_2, |c, (idx, s_i)| {
                     hash_g1g2(&mut hasher, &multi_pp[*idx]);
-                    c + &multi_pp[*idx] * s_i
+                    c + &multi_pp[*idx] * *s_i
                 });
 
         hash_g1g2(&mut hasher, pk);
@@ -623,14 +628,14 @@ mod test {
 
     #[test]
     fn pedersen() {
-        let msg = Scalar::random(rand::thread_rng());
+        let msg = Scalar::rand(&mut rand::thread_rng());
         let (cm, o) = Commitment::commit(&msg);
         assert!(cm.verify(&msg, &o).is_ok());
     }
 
     #[test]
     fn pedersen_proof() {
-        let msg = Scalar::random(rand::thread_rng());
+        let msg = Scalar::rand(&mut rand::thread_rng());
         let (cm, o) = Commitment::commit(&msg);
         assert!(cm.verify(&msg, &o).is_ok());
 
@@ -641,10 +646,10 @@ mod test {
     #[test]
     fn pedersen_proof_2_pk() {
         let pp = get_parameters();
-        let msg_1 = Scalar::random(rand::thread_rng());
+        let msg_1 = Scalar::rand(&mut rand::thread_rng());
         let (cm_1, o_1) = Commitment::commit(&msg_1);
         assert!(cm_1.verify(&msg_1, &o_1).is_ok());
-        let msg_2 = Scalar::random(rand::thread_rng());
+        let msg_2 = Scalar::rand(&mut rand::thread_rng());
         let (cm_2, o_2) = Commitment::commit(&msg_2);
         assert!(cm_2.verify(&msg_2, &o_2).is_ok());
 
@@ -660,9 +665,9 @@ mod test {
         let l = 10;
         let pp = MultiBasePublicParameters::new(l);
 
-        let value_0 = Scalar::random(rand::thread_rng());
+        let value_0 = Scalar::rand(&mut rand::thread_rng());
         for idx in 0..l {
-            let value_i = Scalar::random(rand::thread_rng());
+            let value_i = Scalar::rand(&mut rand::thread_rng());
             let (cm, o) = Commitment::index_commit(&value_0, idx, &value_i, &pp);
             assert!(cm
                 .verify_index_commit(&value_0, idx, &value_i, &o, &pp)
@@ -672,15 +677,15 @@ mod test {
 
     #[test]
     fn multi_pedersen_proof() {
-        let msg = Scalar::random(rand::thread_rng());
+        let msg = Scalar::rand(&mut rand::thread_rng());
         let (commitment, opening) = Commitment::commit(&msg);
 
         let l = 10;
         let pp = MultiBasePublicParameters::new(l);
 
-        let value_0 = Scalar::random(rand::thread_rng());
+        let value_0 = Scalar::rand(&mut rand::thread_rng());
         for idx in 0..l {
-            let value_i = Scalar::random(rand::thread_rng());
+            let value_i = Scalar::rand(&mut rand::thread_rng());
             let (cm, o) = Commitment::index_commit(&value_0, idx, &value_i, &pp);
             assert!(cm
                 .verify_index_commit(&value_0, idx, &value_i, &o, &pp)
@@ -699,10 +704,10 @@ mod test {
         let l = 10;
         let pp = MultiBasePublicParameters::new(l);
 
-        let value_0 = Scalar::random(rand::thread_rng());
+        let value_0 = Scalar::rand(&mut rand::thread_rng());
         let values = [
-            (2usize, Scalar::random(rand::thread_rng())),
-            (7usize, Scalar::random(rand::thread_rng())),
+            (2usize, Scalar::rand(&mut rand::thread_rng())),
+            (7usize, Scalar::rand(&mut rand::thread_rng())),
         ];
         let (cm, o) = Commitment::multi_index_commit(&value_0, values.iter().copied(), &pp);
         assert!(cm
@@ -715,10 +720,10 @@ mod test {
         let l = 10;
         let pp = MultiBasePublicParameters::new(l);
 
-        let value_0 = Scalar::random(rand::thread_rng());
+        let value_0 = Scalar::rand(&mut rand::thread_rng());
         let values = [
-            (2usize, Scalar::random(rand::thread_rng())),
-            (7usize, Scalar::random(rand::thread_rng())),
+            (2usize, Scalar::rand(&mut rand::thread_rng())),
+            (7usize, Scalar::rand(&mut rand::thread_rng())),
         ];
         let (cm, o) = Commitment::multi_index_commit(&value_0, values.iter().copied(), &pp);
         assert!(cm
@@ -726,7 +731,7 @@ mod test {
             .is_ok());
 
         let pk = get_parameters().g.clone();
-        let rprime = Scalar::random(rand::thread_rng());
+        let rprime = Scalar::rand(&mut rand::thread_rng());
         let pk_prime = &pk * rprime;
 
         let proof = cm.proof_multi_index_commit(

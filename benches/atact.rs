@@ -1,11 +1,12 @@
+use ark_ff::UniformRand;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use s3id::{atact::*, Field, Scalar};
+use s3id::{atact::*, Scalar};
 
 fn bench_atact(c: &mut Criterion, num_issuers: usize, n: usize, t: usize, tprime: usize) {
     let mut c = c.benchmark_group(format!("(N, n, t, t') = {:?}", (num_issuers, n, t, tprime)));
 
     let mut rng = rand::thread_rng();
-    let a = Scalar::random(&mut rng);
+    let a = Scalar::rand(&mut rng);
 
     let (pp, issuers) = setup(num_issuers, n, t, tprime, 1).expect("setup failed");
 

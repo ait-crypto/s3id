@@ -1,9 +1,11 @@
+use ark_ff::{Field, One, UniformRand};
+use ark_serialize::CanonicalSerialize;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{pairing_product, ByteConverter, Field, Gt, Scalar},
+    bls381_helpers::{pairing_product, Gt, Scalar},
     lagrange::Lagrange,
     pedersen::{Commitment, Proof2PK},
     tsw::{self, PublicKey, SecretKey, Signature},
@@ -124,7 +126,7 @@ pub fn token_request(
     let mut rks = vec![];
     let mut coms = vec![];
     for _ in 0..(pp.tprime - 1) {
-        let ak = Scalar::random(&mut rng);
+        let ak = Scalar::rand(&mut rng);
         let (cm_k, o_k) = Commitment::commit(&ak);
         coms.push(cm_k);
         rks.push(&pp.pk * *o_k.as_ref());
@@ -144,7 +146,7 @@ pub fn token_request(
             lagrange.update_point(pp.tprime - 1, Scalar::from(k as u64));
         }
         // SAFETY: this is always non-0
-        let lk_i = lagrange.eval_j_0(pp.tprime - 1).invert().unwrap();
+        let lk_i = lagrange.eval_j_0(pp.tprime - 1).inverse().unwrap();
 
         let base_com = commitment
             - &coms
@@ -166,7 +168,7 @@ pub fn token_request(
     }
 
     // Step 10
-    let bold_k = Scalar::random(&mut rng);
+    let bold_k = Scalar::rand(&mut rng);
     let (bold_cm_k, bold_cm_opening) = Commitment::commit(&bold_k);
 
     Ok((
@@ -219,9 +221,11 @@ pub struct Token {
 
 impl Token {
     pub fn hash_prime(&self, pp: &PublicParameters) -> Vec<usize> {
+        let mut buffer = Vec::new();
+        self.s.0 .0.serialize_uncompressed(&mut buffer);
+        self.s.0 .1.serialize_uncompressed(&mut buffer);
         let mut hasher = sha3::Shake256::default();
-        hasher.update(&self.s.0 .0.as_serde_bytes());
-        hasher.update(&self.s.0 .1.as_serde_bytes());
+        hasher.update(&buffer);
         let mut reader = hasher.finalize_xof();
         debug_assert!(pp.n < 256);
 
@@ -342,14 +346,10 @@ pub fn verify(
         .map(|k| &token_proof.ss[k] * pp.lagrange_tprime.eval_j_0(k))
         .sum();
     let sk_prod = -sk_prod.0;
-    if pairing_product(&[(&token.s.0, &token_proof.pk_prime.0), (&sk_prod, &pp.pk.0)])
-        != Gt::identity()
-    {
+    if !pairing_product(&[(&token.s.0, &token_proof.pk_prime.0), (&sk_prod, &pp.pk.0)]).is_one() {
         errs.push(AtACTError::InvalidToken);
     }
-    if pairing_product(&[(&token_proof.pk_prime.0, &token.s.0), (&pp.pk.0, &sk_prod)])
-        != Gt::identity()
-    {
+    if !pairing_product(&[(&token_proof.pk_prime.0, &token.s.0), (&pp.pk.0, &sk_prod)]).is_one() {
         errs.push(AtACTError::InvalidToken);
     }
 
@@ -436,7 +436,7 @@ mod test {
 
         let mut rng = rand::thread_rng();
         let attributes: Vec<_> = (0..NUM_ATTRIBUTES)
-            .map(|_| Scalar::random(&mut rng))
+            .map(|_| Scalar::rand(&mut rng))
             .collect();
 
         let (pp, issuers) = setup(NUM_ISSUERS, N, T, TPRIME, 1).expect("setup failed");

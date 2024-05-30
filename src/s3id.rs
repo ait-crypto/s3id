@@ -1,5 +1,4 @@
-use ark_ec::ProjectiveCurve;
-use ark_ff::{field_new, Zero};
+use ark_ff::{UniformRand, Zero};
 use groth_sahai::{prover::Provable, AbstractCrs, Matrix};
 use rand::thread_rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
@@ -8,8 +7,8 @@ use thiserror::Error;
 use crate::{
     atact::{self, AtACTError, Token},
     bls381_helpers::{
-        gs::{self, CProof, CRS, GSG1G2, PPE},
-        pairing, Field, Scalar, G1G2,
+        gs::{CProof, CRS, PPE},
+        pairing, G1Affine, G2Affine, Scalar, G1G2,
     },
     pedersen::{
         self, get_parameters, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
@@ -107,7 +106,7 @@ pub fn dedup(
     // 7.d
     let token_proof = atact::prove(&token, &rand, &pp.atact_pp);
 
-    let bold_k = Scalar::random(thread_rng());
+    let bold_k = Scalar::rand(&mut thread_rng());
     let (cm_k, cm_k_opening) = Commitment::commit(&bold_k);
 
     // 7.f
@@ -226,11 +225,11 @@ pub fn appcred(
         &pp.pedersen_pp,
     );
 
-    let r_prime = Scalar::random(&mut rng);
+    let r_prime = Scalar::rand(&mut rng);
     let pk_prime = &pp.atact_pp.pk * r_prime;
 
     let zeta = q.iter().map(|idx| &signatures[*idx]).sum::<Signature>()
-        + (&pp.atact_pp.pk * tau_opening.as_ref());
+        + (&pp.atact_pp.pk * tau_opening.r);
     let zeta = zeta * r_prime;
 
     let pi = tau.proof_multi_index_commit(
@@ -247,23 +246,20 @@ pub fn appcred(
     // e(zeta, g) = t
     // e(g, zeta) = t
 
-    let gs_zeta = GSG1G2::from(&zeta.0);
     let pp2 = get_parameters();
-    let gs_g = GSG1G2::from(&pp2.g);
 
-    let g1_1_vars = vec![gs_zeta.0.into_affine()];
-    let g2_2_vars = vec![gs_zeta.1.into_affine()];
+    let g1_1_vars = vec![zeta.0 .0.into()];
+    let g2_2_vars = vec![zeta.0 .1.into()];
 
-    let g1_1_consts = vec![gs::G1Affine::zero()];
-    let g1_2_consts = vec![gs_g.0.into_affine()];
-    let g2_1_consts = vec![gs_g.1.into_affine()];
-    let g2_2_consts = vec![gs::G2Affine::zero()];
+    let g1_1_consts = vec![G1Affine::zero()];
+    let g1_2_consts = vec![pp2.g.0.into()];
+    let g2_1_consts = vec![pp2.g.1.into()];
+    let g2_2_consts = vec![G2Affine::zero()];
 
-    type GSScalar = gs::Scalar;
     let gamma: Matrix<_> = vec![vec![], vec![]];
 
     // Target -> all together (n.b. e(X_1, Y_1)^5 = e(X_1, 5 Y_1) = e(5 X_1, Y_1) by the properties of non-degenerate bilinear maps)
-    let target = gs::pairing(&gs_zeta, &gs_g);
+    let target = pairing(&zeta.0, &pp2.g);
 
     let equ_1 = PPE {
         a_consts: g1_1_consts,
@@ -334,16 +330,20 @@ pub fn verifycred(
 mod test {
     use super::*;
 
+    use ark_ff::UniformRand;
+
     #[test]
     fn basic() {
+        let mut rng = thread_rng();
+
         let num_issuers = 10;
         let t = num_issuers / 2 + 1;
         let n = 32;
         let tprime = n / 2 + 1;
         let big_l = 10;
 
-        let attribute = Scalar::random(thread_rng());
-        let attributes: Vec<_> = (0..big_l).map(|_| Scalar::random(thread_rng())).collect();
+        let attribute = Scalar::rand(&mut rng);
+        let attributes: Vec<_> = (0..big_l).map(|_| Scalar::rand(&mut rng)).collect();
         let attributes_subset: Vec<_> = (0..big_l)
             .filter_map(|idx| {
                 if idx % 2 == 0 {

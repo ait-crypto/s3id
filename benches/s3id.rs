@@ -1,5 +1,6 @@
+use ark_ff::UniformRand;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use s3id::{s3id::*, Field, Scalar};
+use s3id::{s3id::*, Scalar};
 
 fn bench_s3id(
     c: &mut Criterion,
@@ -16,8 +17,8 @@ fn bench_s3id(
 
     let mut rng = rand::thread_rng();
 
-    let attribute = Scalar::random(&mut rng);
-    let attributes: Vec<_> = (0..big_l).map(|_| Scalar::random(&mut rng)).collect();
+    let attribute = Scalar::rand(&mut rng);
+    let attributes: Vec<_> = (0..big_l).map(|_| Scalar::rand(&mut rng)).collect();
     let attributes_subset: Vec<_> = (0..big_l)
         .filter_map(|idx| {
             if idx % 2 == 0 {

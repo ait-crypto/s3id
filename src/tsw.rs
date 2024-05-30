@@ -4,11 +4,12 @@ use std::{
     ops::{Add, Index, Mul, Sub},
 };
 
+use ark_ff::{Field, One, UniformRand};
 use rand::thread_rng;
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{hash_usize, pairing_product, Field, Gt, Scalar, G1G2},
+    bls381_helpers::{hash_usize, pairing_product, Gt, Scalar, G1G2},
     lagrange::Lagrange,
     pedersen::{get_parameters, Commitment},
 };
@@ -59,13 +60,13 @@ pub struct SecretKey {
 impl SecretKey {
     pub fn new() -> Self {
         Self {
-            sk: Scalar::random(thread_rng()),
+            sk: Scalar::rand(&mut thread_rng()),
         }
     }
 
     pub fn into_shares(&self, num_shares: usize, t: usize) -> Vec<SecretKey> {
         let mut rng = thread_rng();
-        let mut sks: Vec<_> = (0..t - 1).map(|_| Scalar::random(&mut rng)).collect();
+        let mut sks: Vec<_> = (0..t - 1).map(|_| Scalar::rand(&mut rng)).collect();
 
         let mut base_points: Vec<_> = (1..=t).map(|i| Scalar::from(i as u64)).collect();
         for k in t..=num_shares {
@@ -77,10 +78,10 @@ impl SecretKey {
                     .iter()
                     .take(t - 1)
                     .enumerate()
-                    .map(|(j, sk)| sk * lagrange.eval_j_0(j))
+                    .map(|(j, sk)| *sk * lagrange.eval_j_0(j))
                     .sum::<Scalar>();
 
-            sks.push(base * lagrange.eval_j_0(t - 1).invert().unwrap());
+            sks.push(base * lagrange.eval_j_0(t - 1).inverse().unwrap());
         }
         sks.into_iter().map(|sk| SecretKey { sk }).collect()
     }
@@ -128,9 +129,8 @@ impl PublicKey {
 
         let check = -(&pp[index] + &commitment.0);
 
-        if pairing_product(&[(&check, &self.0), (&signature.0, &pedersen_pp.g)]) == Gt::identity()
-            && pairing_product(&[(&self.0, &check), (&pedersen_pp.g, &signature.0)])
-                == Gt::identity()
+        if pairing_product(&[(&check, &self.0), (&signature.0, &pedersen_pp.g)]).is_one()
+            && pairing_product(&[(&self.0, &check), (&pedersen_pp.g, &signature.0)]).is_one()
         {
             Ok(())
         } else {
@@ -155,7 +155,7 @@ impl Signature {
 impl PublicKey {
     pub fn is_valid(&self) -> bool {
         let pp = get_parameters();
-        pairing_product(&[(&-&self.0, &pp.g), (&pp.g, &self.0)]) == Gt::identity()
+        pairing_product(&[(&-&self.0, &pp.g), (&pp.g, &self.0)]).is_one()
     }
 }
 
@@ -173,24 +173,6 @@ impl Mul<Scalar> for PublicKey {
 
     #[inline]
     fn mul(self, rhs: Scalar) -> Self::Output {
-        PublicKey(self.0 * rhs)
-    }
-}
-
-impl Mul<&Scalar> for &PublicKey {
-    type Output = PublicKey;
-
-    #[inline]
-    fn mul(self, rhs: &Scalar) -> Self::Output {
-        PublicKey(&self.0 * rhs)
-    }
-}
-
-impl Mul<&Scalar> for PublicKey {
-    type Output = PublicKey;
-
-    #[inline]
-    fn mul(self, rhs: &Scalar) -> Self::Output {
         PublicKey(self.0 * rhs)
     }
 }
@@ -273,29 +255,11 @@ impl Mul<Scalar> for Signature {
     }
 }
 
-impl Mul<&Scalar> for Signature {
-    type Output = Signature;
-
-    #[inline]
-    fn mul(self, rhs: &Scalar) -> Self::Output {
-        Signature(self.0 * rhs)
-    }
-}
-
 impl Mul<Scalar> for &Signature {
     type Output = Signature;
 
     #[inline]
     fn mul(self, rhs: Scalar) -> Self::Output {
-        Signature(&self.0 * rhs)
-    }
-}
-
-impl Mul<&Scalar> for &Signature {
-    type Output = Signature;
-
-    #[inline]
-    fn mul(self, rhs: &Scalar) -> Self::Output {
         Signature(&self.0 * rhs)
     }
 }
@@ -326,7 +290,7 @@ mod test {
         let n = 10;
         let t = n / 2 + 1;
 
-        let (cm, _) = Commitment::commit(&Scalar::random(rand::thread_rng()));
+        let (cm, _) = Commitment::commit(&Scalar::rand(&mut rand::thread_rng()));
         let sk = SecretKey::new();
         let sks = sk.into_shares(n, t);
         let sigs: Vec<_> = sks
@@ -377,7 +341,7 @@ mod test {
     #[test]
     fn sw_commitment() {
         let pp = PublicParameters::new(3);
-        let (cm, _) = Commitment::commit(&Scalar::random(rand::thread_rng()));
+        let (cm, _) = Commitment::commit(&Scalar::rand(&mut rand::thread_rng()));
 
         let sk = SecretKey::new();
         let pk = sk.to_public_key();
@@ -408,11 +372,11 @@ mod test {
         let sk = SecretKey::new();
         let pk = sk.to_public_key();
         let multi_pp = MultiBasePublicParameters::new(L);
-        let value_0 = Scalar::random(rand::thread_rng());
+        let value_0 = Scalar::rand(&mut rand::thread_rng());
 
         let index_attributes = [
-            (2, Scalar::random(rand::thread_rng())),
-            (5, Scalar::random(rand::thread_rng())),
+            (2, Scalar::rand(&mut rand::thread_rng())),
+            (5, Scalar::rand(&mut rand::thread_rng())),
         ];
 
         let signatures: Vec<_> = index_attributes

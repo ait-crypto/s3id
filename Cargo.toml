@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bls12_381 = { version = "0.8", features = ["experimental"] }
-group = { version = "0.13", features = ["rand"] }
 rand = "0.8"
 rayon = "1"
 sha2 = { version = "0.9", default-features = false, features = ["std"] }
@@ -16,6 +14,7 @@ ark-bls12-381 = { version = "0.3" }
 ark-ec = { version = "0.3", default-features = false }
 ark-ff = { version = "0.3", default-features = false }
 ark-serialize = { version = "0.3", default-features = false }
+rand_chacha = { version = "0.3" }
 
 [dev-dependencies]
 criterion = "0.5"
