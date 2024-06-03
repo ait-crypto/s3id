@@ -1,5 +1,5 @@
-use ark_ff::UniformRand;
-use groth_sahai::{prover::Provable, AbstractCrs, Matrix};
+use ark_ff::{UniformRand, Zero};
+use groth_sahai::{prover::Provable, verifier::Verifiable, AbstractCrs, Matrix};
 use rand::thread_rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use thiserror::Error;
@@ -13,7 +13,7 @@ use crate::{
     pedersen::{
         self, get_parameters, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
     },
-    tsw::{PublicKey, Signature},
+    tsw::Signature,
 };
 
 pub struct PublicParameters {
@@ -188,7 +188,6 @@ pub fn microcred(
 }
 
 pub struct Credential {
-    zeta: Signature,
     tau: Commitment,
     prf: G1G2,
 }
@@ -252,7 +251,7 @@ pub fn appcred(
     let g1_2_consts = vec![pp2.g.0.into()];
     let g2_1_consts = vec![pp2.g.1.into()];
 
-    let gamma: Matrix<_> = vec![vec![], vec![]];
+    let gamma: Matrix<_> = vec![vec![Scalar::zero()]];
 
     let target_1 = pairing(&zeta.0, &pp2.g);
     let target_2 = pairing(&pp2.g, &zeta.0);
@@ -267,7 +266,7 @@ pub fn appcred(
     // assert!(equ.verify(&proof, &crs));
 
     Ok((
-        Credential { zeta, tau, prf },
+        Credential { tau, prf },
         Proof {
             pi,
             gs_pi_1,
@@ -293,20 +292,31 @@ pub fn verifycred(
         .pi
         .s_i
         .iter()
-        .map(|(idx, _)| &pp.atact_pp.tsw_pp[idx + 1])
+        .map(|(idx, _)| &pp.atact_pp.tsw_pp[*idx + 1])
         .sum();
     let pk = &pp.atact_pp.pk;
-    let zeta = &cred.zeta;
     let tau = &cred.tau;
-    let pp = get_parameters();
+    let pp2 = get_parameters();
     let check = h + &tau.0;
 
-    if pairing(&zeta.0, &pp.g) != pairing(&check, &pk.0)
-        || pairing(&pp.g, &zeta.0) != pairing(&pk.0, &check)
-    {
-        Err(S3IDError::InvalidCredential)
-    } else {
+    let g1_2_consts = vec![pp2.g.0.into()];
+    let g2_1_consts = vec![pp2.g.1.into()];
+
+    let gamma: Matrix<_> = vec![vec![Scalar::zero()]];
+
+    let target_1 = pairing(&check, &pk.0);
+    let target_2 = pairing(&pk.0, &check);
+
+    let equ_1 = PPE {
+        a_consts: g1_2_consts,
+        b_consts: g2_1_consts,
+        gamma,
+        target: target_1 * target_2,
+    };
+    if equ_1.verify(&pi.gs_pi_1, &pp.crs) {
         Ok(())
+    } else {
+        Err(S3IDError::InvalidCredential)
     }
 }
 
