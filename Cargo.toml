@@ -9,7 +9,7 @@ rayon = "1"
 sha2 = { version = "0.9", default-features = false, features = ["std"] }
 sha3 = { version = "0.10", default-features = false, features = ["std", "asm"] }
 thiserror = "1"
-groth-sahai = { path = "../groth-sahai-rs" }
+groth-sahai = { git = "https://github.com/jdwhite48/groth-sahai-rs" }
 ark-bls12-381 = { version = "0.3" }
 ark-ec = { version = "0.3", default-features = false }
 ark-ff = { version = "0.3", default-features = false }
