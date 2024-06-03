@@ -107,8 +107,8 @@ pub struct ProofMultiIndex {
     s_1: Scalar,
     s_2: Scalar,
     pub(crate) s_i: Vec<(usize, Scalar)>,
-    t_pk: G1G2,
-    s_pk: Scalar,
+    t_prf: G1G2,
+    s_prf: Scalar,
 }
 
 #[inline]
@@ -426,14 +426,18 @@ impl Commitment {
         multi_pp: &MultiBasePublicParameters,
     ) -> (Commitment, Opening)
     where
-        I: Iterator<Item = (usize, Scalar)>,
+        I: Iterator<Item = (usize, Scalar)> + ExactSizeIterator,
     {
+        let len = Scalar::from(iter.len() as u64);
         let pp = get_parameters();
         let r = Scalar::rand(&mut rand::thread_rng());
-        let cm = iter.fold(&pp.g * r + &pp.u * *value_0, |cm, (idx, value_i)| {
-            debug_assert!(idx < multi_pp.us.len());
-            cm + &multi_pp[idx] * value_i
-        });
+        let cm = iter.fold(
+            &pp.g * r + &pp.u * (*value_0 * len),
+            |cm, (idx, value_i)| {
+                debug_assert!(idx < multi_pp.us.len());
+                cm + &multi_pp[idx] * value_i
+            },
+        );
 
         (Commitment(cm), Opening { r })
     }
@@ -446,11 +450,12 @@ impl Commitment {
         multi_pp: &MultiBasePublicParameters,
     ) -> Result<(), Error>
     where
-        I: Iterator<Item = (usize, Scalar)>,
+        I: Iterator<Item = (usize, Scalar)> + ExactSizeIterator,
     {
+        let len = Scalar::from(iter.len() as u64);
         let pp = get_parameters();
         let cm = iter.fold(
-            &pp.g * opening.r + &pp.u * *value_0,
+            &pp.g * opening.r + &pp.u * (*value_0 * len),
             |cm, (idx, value_i)| {
                 debug_assert!(idx < multi_pp.us.len());
                 cm + &multi_pp[idx] * value_i
@@ -470,26 +475,27 @@ impl Commitment {
         value_0: &Scalar,
         iter: I,
         opening: &Opening,
-        pk: &G1G2,
-        pk_prime: &G1G2,
-        r_prime: &Scalar,
+        prf_base: &G1G2,
+        prf: &G1G2,
         multi_pp: &MultiBasePublicParameters,
     ) -> ProofMultiIndex
     where
         I: Iterator<Item = (usize, Scalar)> + ExactSizeIterator,
     {
+        let len = Scalar::from(iter.len() as u64);
+
         let pp = get_parameters();
         let randoms_and_values = Vec::with_capacity(iter.len());
         let mut rng = rand::thread_rng();
         let r1 = Scalar::rand(&mut rng);
         let r2 = Scalar::rand(&mut rng);
-        let r3 = Scalar::rand(&mut rng);
+        let r_prf = Scalar::rand(&mut rng);
         let mut hasher = hash_context();
 
-        let t_pk = pk * r3;
+        let t_prf = prf_base * r_prf;
 
         let (t, randoms_and_values) = iter.fold(
-            (&pp.g * r1 + &pp.u * r2, randoms_and_values),
+            (&pp.g * r1 + &pp.u * (r2 * len), randoms_and_values),
             |(t, mut randoms_and_values), (idx, value_i)| {
                 let random = Scalar::rand(&mut rng);
                 randoms_and_values.push((idx, random, value_i));
@@ -497,16 +503,16 @@ impl Commitment {
                 (t + &multi_pp[idx] * random, randoms_and_values)
             },
         );
-        hash_g1g2(&mut hasher, pk);
+        hash_g1g2(&mut hasher, prf_base);
         hash_commitment(&mut hasher, self);
-        hash_g1g2(&mut hasher, pk_prime);
+        hash_g1g2(&mut hasher, prf);
         hash_g1g2(&mut hasher, &t);
-        hash_g1g2(&mut hasher, &t_pk);
+        hash_g1g2(&mut hasher, &t_prf);
         let c = hash_extract_scalar(hasher);
 
         let s_1 = r1 + opening.r * c;
         let s_2 = r2 + *value_0 * c;
-        let s_pk = r3 + *r_prime * c;
+        let s_prf = r_prf + *value_0 * c;
 
         ProofMultiIndex {
             t,
@@ -516,8 +522,8 @@ impl Commitment {
                 .into_iter()
                 .map(|(idx, r_i, value_i)| (idx, r_i + value_i * c))
                 .collect(),
-            t_pk,
-            s_pk,
+            t_prf,
+            s_prf,
         }
     }
 
@@ -528,26 +534,27 @@ impl Commitment {
         proof: &ProofMultiIndex,
         multi_pp: &MultiBasePublicParameters,
     ) -> Result<(), Error> {
+        let len = Scalar::from(proof.s_i.len() as u64);
+
         let mut hasher = hash_context();
         let pp = get_parameters();
 
-        let check_1 =
-            proof
-                .s_i
-                .iter()
-                .fold(&pp.g * proof.s_1 + &pp.u * proof.s_2, |c, (idx, s_i)| {
-                    hash_g1g2(&mut hasher, &multi_pp[*idx]);
-                    c + &multi_pp[*idx] * *s_i
-                });
+        let check_1 = proof.s_i.iter().fold(
+            &pp.g * proof.s_1 + &pp.u * (proof.s_2 * len),
+            |c, (idx, s_i)| {
+                hash_g1g2(&mut hasher, &multi_pp[*idx]);
+                c + &multi_pp[*idx] * *s_i
+            },
+        );
 
         hash_g1g2(&mut hasher, pk);
         hash_commitment(&mut hasher, self);
         hash_g1g2(&mut hasher, pk_prime);
         hash_g1g2(&mut hasher, &proof.t);
-        hash_g1g2(&mut hasher, &proof.t_pk);
+        hash_g1g2(&mut hasher, &proof.t_prf);
         let c = hash_extract_scalar(hasher);
 
-        if check_1 == &self.0 * c + &proof.t && pk * proof.s_pk == pk_prime * c + &proof.t_pk {
+        if check_1 == &self.0 * c + &proof.t && pk * proof.s_prf == pk_prime * c + &proof.t_prf {
             Ok(())
         } else {
             Err(Error::InvalidProof)
@@ -730,21 +737,13 @@ mod test {
             .verify_multi_index_commit(&value_0, values.iter().copied(), &o, &pp)
             .is_ok());
 
-        let pk = get_parameters().g.clone();
-        let rprime = Scalar::rand(&mut rand::thread_rng());
-        let pk_prime = &pk * rprime;
+        let prf_base = hash_with_domain_separation(b"msg", b"prf");
+        let prf = prf_base.clone() * value_0;
 
-        let proof = cm.proof_multi_index_commit(
-            &value_0,
-            values.iter().copied(),
-            &o,
-            &pk,
-            &pk_prime,
-            &rprime,
-            &pp,
-        );
+        let proof =
+            cm.proof_multi_index_commit(&value_0, values.iter().copied(), &o, &prf_base, &prf, &pp);
         assert!(cm
-            .verify_proof_multi_index_commit(&pk, &pk_prime, &proof, &pp)
+            .verify_proof_multi_index_commit(&prf_base, &prf, &proof, &pp)
             .is_ok());
     }
 }

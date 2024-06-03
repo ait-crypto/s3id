@@ -9,7 +9,7 @@ use rand::thread_rng;
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{hash_usize, pairing_product, Gt, Scalar, G1G2},
+    bls381_helpers::{hash_usize, pairing_product, Scalar, G1G2},
     lagrange::Lagrange,
     pedersen::{get_parameters, Commitment},
 };

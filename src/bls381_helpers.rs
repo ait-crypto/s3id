@@ -273,7 +273,9 @@ mod test {
 pub mod gs {
     use ark_bls12_381::Bls12_381;
 
+    #[allow(clippy::upper_case_acronyms)]
     pub type CRS = groth_sahai::CRS<Bls12_381>;
+    #[allow(clippy::upper_case_acronyms)]
     pub type PPE = groth_sahai::statement::PPE<Bls12_381>;
     pub type CProof = groth_sahai::prover::CProof<Bls12_381>;
 }

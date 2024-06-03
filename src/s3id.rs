@@ -1,4 +1,4 @@
-use ark_ff::{UniformRand, Zero};
+use ark_ff::UniformRand;
 use groth_sahai::{prover::Provable, AbstractCrs, Matrix};
 use rand::thread_rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
@@ -8,7 +8,7 @@ use crate::{
     atact::{self, AtACTError, Token},
     bls381_helpers::{
         gs::{CProof, CRS, PPE},
-        pairing, G1Affine, G2Affine, Scalar, G1G2,
+        hash_with_domain_separation, pairing, Scalar, G1G2,
     },
     pedersen::{
         self, get_parameters, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
@@ -190,7 +190,7 @@ pub fn microcred(
 pub struct Credential {
     zeta: Signature,
     tau: Commitment,
-    pk_prime: PublicKey,
+    prf: G1G2,
 }
 
 pub struct Proof {
@@ -203,7 +203,7 @@ pub fn appcred(
     attributes: &[Scalar],
     signatures: &[Signature],
     prv_u: &UserSecretKey,
-    _msg: &[u8],
+    msg: &[u8],
     attribute_subset: &[Scalar],
     pp: &PublicParameters,
 ) -> Result<(Credential, Proof), S3IDError> {
@@ -225,20 +225,18 @@ pub fn appcred(
         &pp.pedersen_pp,
     );
 
-    let r_prime = Scalar::rand(&mut rng);
-    let pk_prime = &pp.atact_pp.pk * r_prime;
+    let prf_base = hash_with_domain_separation(msg, b"PRF");
+    let prf = prf_base.clone() * prv_u.k;
 
     let zeta = q.iter().map(|idx| &signatures[*idx]).sum::<Signature>()
         + (&pp.atact_pp.pk * tau_opening.r);
-    let zeta = zeta * r_prime;
 
     let pi = tau.proof_multi_index_commit(
         &prv_u.k,
         q.iter().map(|idx| (*idx, attributes[*idx])),
         &tau_opening,
-        &pp.atact_pp.pk.0,
-        &pk_prime.0,
-        &r_prime,
+        &prf_base,
+        &prf,
         &pp.pedersen_pp,
     );
 
@@ -269,11 +267,7 @@ pub fn appcred(
     // assert!(equ.verify(&proof, &crs));
 
     Ok((
-        Credential {
-            zeta,
-            tau,
-            pk_prime,
-        },
+        Credential { zeta, tau, prf },
         Proof {
             pi,
             gs_pi_1,
@@ -285,12 +279,12 @@ pub fn appcred(
 pub fn verifycred(
     cred: &Credential,
     pi: &Proof,
-    _msg: &[u8],
+    msg: &[u8],
     pp: &PublicParameters,
 ) -> Result<(), S3IDError> {
     cred.tau.verify_proof_multi_index_commit(
-        &pp.atact_pp.pk.0,
-        &cred.pk_prime.0,
+        &hash_with_domain_separation(msg, b"PRF"),
+        &cred.prf,
         &pi.pi,
         &pp.pedersen_pp,
     )?;
