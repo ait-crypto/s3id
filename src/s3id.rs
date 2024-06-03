@@ -239,31 +239,29 @@ pub fn appcred(
         &pp.pedersen_pp,
     );
 
-    // equation:
-    // e(zeta, g) = t
-    // e(g, zeta) = t
-
     let pp2 = get_parameters();
 
     let g1_1_vars = vec![zeta.0 .0.into()];
     let g2_2_vars = vec![zeta.0 .1.into()];
 
-    let g1_2_consts = vec![pp2.g.0.into()];
-    let g2_1_consts = vec![pp2.g.1.into()];
+    let a_consts = vec![pp2.g.0.into()];
+    let b_consts = vec![pp2.g.1.into()];
 
     let gamma: Matrix<_> = vec![vec![Scalar::zero()]];
 
     let target_1 = pairing(&zeta.0, &pp2.g);
     let target_2 = pairing(&pp2.g, &zeta.0);
 
+    // this is limitation of the GS implementation, we can only do one equation
+    // where both variables in G1 and G2 are used; hence we prove the product of
+    // these two equations to understand the performance characteristics
     let equ_1 = PPE {
-        a_consts: g1_2_consts,
-        b_consts: g2_1_consts,
+        a_consts,
+        b_consts,
         gamma: gamma.clone(),
         target: target_1 * target_2,
     };
     let gs_pi_1 = equ_1.commit_and_prove(&g1_1_vars, &g2_2_vars, &pp.crs, &mut rng);
-    // assert!(equ.verify(&proof, &crs));
 
     Ok((
         Credential { tau, prf },
@@ -299,8 +297,8 @@ pub fn verifycred(
     let pp2 = get_parameters();
     let check = h + &tau.0;
 
-    let g1_2_consts = vec![pp2.g.0.into()];
-    let g2_1_consts = vec![pp2.g.1.into()];
+    let a_consts = vec![pp2.g.0.into()];
+    let b_consts = vec![pp2.g.1.into()];
 
     let gamma: Matrix<_> = vec![vec![Scalar::zero()]];
 
@@ -308,8 +306,8 @@ pub fn verifycred(
     let target_2 = pairing(&pk.0, &check);
 
     let equ_1 = PPE {
-        a_consts: g1_2_consts,
-        b_consts: g2_1_consts,
+        a_consts,
+        b_consts,
         gamma,
         target: target_1 * target_2,
     };
