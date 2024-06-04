@@ -1,12 +1,14 @@
 [package]
 name = "s3id"
 version = "0.1.0"
+authors = ["Sebastian Ramacher <sebastian.ramacher@ait.ac.at>"]
+license = "Apache-2.0 OR MIT"
 edition = "2021"
 
 [dependencies]
 rand = "0.8"
 rayon = "1"
-sha2 = { version = "0.9", default-features = false, features = ["std"] }
+sha2 = { version = "0.10", default-features = false, features = ["std"] }
 sha3 = { version = "0.10", default-features = false, features = ["std", "asm"] }
 thiserror = "1"
 groth-sahai = { git = "https://github.com/jdwhite48/groth-sahai-rs" }
