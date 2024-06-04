@@ -1,7 +1,7 @@
 [package]
 name = "s3id"
 version = "0.1.0"
-authors = ["Sebastian Ramacher <sebastian.ramacher@ait.ac.at>"]
+authors = ["Sebastian Ramacher"]
 license = "Apache-2.0 OR MIT"
 edition = "2021"
 
