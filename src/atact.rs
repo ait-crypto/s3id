@@ -327,7 +327,6 @@ pub fn verify(
     debug_assert_eq!(c.len(), pp.tprime - 1);
 
     let pk_prime = &token_proof.pk_prime;
-    let mut errs = vec![];
 
     if blind_request
         .cm
@@ -339,18 +338,17 @@ pub fn verify(
         )
         .is_err()
     {
-        errs.push(AtACTError::InvalidZKProof);
+        return Err(AtACTError::InvalidZKProof);
     }
 
     let sk_prod: Signature = (0..pp.tprime)
         .map(|k| &token_proof.ss[k] * pp.lagrange_tprime.eval_j_0(k))
         .sum();
     let sk_prod = -sk_prod.0;
-    if !pairing_product(&[(&token.s.0, &token_proof.pk_prime.0), (&sk_prod, &pp.pk.0)]).is_one() {
-        errs.push(AtACTError::InvalidToken);
-    }
-    if !pairing_product(&[(&token_proof.pk_prime.0, &token.s.0), (&pp.pk.0, &sk_prod)]).is_one() {
-        errs.push(AtACTError::InvalidToken);
+    if !pairing_product(&[(&token.s.0, &token_proof.pk_prime.0), (&sk_prod, &pp.pk.0)]).is_one()
+        || !pairing_product(&[(&token_proof.pk_prime.0, &token.s.0), (&pp.pk.0, &sk_prod)]).is_one()
+    {
+        return Err(AtACTError::InvalidToken);
     }
 
     let mut base_points: Vec<_> = c.iter().map(|k| Scalar::from(*k as u64 + 1)).collect();
@@ -373,7 +371,7 @@ pub fn verify(
                 )
                 .is_err()
             {
-                errs.push(AtACTError::InvalidSignature(k));
+                return Err(AtACTError::InvalidSignature(k));
             }
         } else {
             lagrange.update_point(pp.tprime - 1, Scalar::from(k as u64 + 1));
@@ -388,16 +386,12 @@ pub fn verify(
             if &blind_request.cm_ks[k] * lagrange.eval_j_0(pp.tprime - 1) + &cm_base
                 != blind_request.cm
             {
-                errs.push(AtACTError::InvalidCommitmentProof(k));
+                return Err(AtACTError::InvalidCommitmentProof(k));
             }
         }
     }
 
-    if errs.is_empty() {
-        Ok(())
-    } else {
-        Err(AtACTError::InvalidProof(errs))
-    }
+    Ok(())
 }
 
 #[derive(Error, Debug, PartialEq, Clone)]
