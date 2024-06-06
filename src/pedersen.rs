@@ -11,7 +11,7 @@ use rand::{RngCore, SeedableRng};
 use sha2::{digest::consts::U32, Digest, Sha256 as Hasher};
 use thiserror::Error;
 
-use crate::bls381_helpers::{hash_with_domain_separation, Scalar, G1G2};
+use crate::bls381_helpers::{gs::CProof, hash_with_domain_separation, Scalar, G1G2};
 
 pub struct PublicParameters {
     pub g: G1G2,
@@ -139,6 +139,34 @@ where
 
     hash_g1g2(hasher, &pp.g);
     hash_g1g2(hasher, &pp.u);
+}
+
+#[inline]
+fn hash_gs<D>(hasher: &mut D, proof: &CProof)
+where
+    D: Digest,
+{
+    let mut storage = Vec::new();
+    proof.xcoms.coms.iter().for_each(|com| {
+        com.0.serialize_uncompressed(&mut storage).unwrap();
+        com.1.serialize_uncompressed(&mut storage).unwrap();
+    });
+    proof.ycoms.coms.iter().for_each(|com| {
+        com.0.serialize_uncompressed(&mut storage).unwrap();
+        com.1.serialize_uncompressed(&mut storage).unwrap();
+    });
+    proof.equ_proofs.iter().for_each(|prf| {
+        let mut storage = Vec::new();
+        prf.pi.iter().for_each(|com| {
+            com.0.serialize_uncompressed(&mut storage).unwrap();
+            com.1.serialize_uncompressed(&mut storage).unwrap();
+        });
+        prf.theta.iter().for_each(|com| {
+            com.0.serialize_uncompressed(&mut storage).unwrap();
+            com.1.serialize_uncompressed(&mut storage).unwrap();
+        });
+    });
+    hasher.update(&storage);
 }
 
 #[inline]
@@ -477,6 +505,7 @@ impl Commitment {
         opening: &Opening,
         prf_base: &G1G2,
         prf: &G1G2,
+        gs_proof: Option<&CProof>,
         multi_pp: &MultiBasePublicParameters,
     ) -> ProofMultiIndex
     where
@@ -508,6 +537,9 @@ impl Commitment {
         hash_g1g2(&mut hasher, prf);
         hash_g1g2(&mut hasher, &t);
         hash_g1g2(&mut hasher, &t_prf);
+        if let Some(gs) = gs_proof {
+            hash_gs(&mut hasher, gs);
+        }
         let c = hash_extract_scalar(hasher);
 
         let s_1 = r1 + opening.r * c;
@@ -531,6 +563,7 @@ impl Commitment {
         &self,
         pk: &G1G2,
         pk_prime: &G1G2,
+        gs_proof: Option<&CProof>,
         proof: &ProofMultiIndex,
         multi_pp: &MultiBasePublicParameters,
     ) -> Result<(), Error> {
@@ -552,6 +585,9 @@ impl Commitment {
         hash_g1g2(&mut hasher, pk_prime);
         hash_g1g2(&mut hasher, &proof.t);
         hash_g1g2(&mut hasher, &proof.t_prf);
+        if let Some(gs) = gs_proof {
+            hash_gs(&mut hasher, gs);
+        }
         let c = hash_extract_scalar(hasher);
 
         if check_1 == &self.0 * c + &proof.t && pk * proof.s_prf == pk_prime * c + &proof.t_prf {
@@ -740,10 +776,17 @@ mod test {
         let prf_base = hash_with_domain_separation(b"msg", b"prf");
         let prf = prf_base.clone() * value_0;
 
-        let proof =
-            cm.proof_multi_index_commit(&value_0, values.iter().copied(), &o, &prf_base, &prf, &pp);
+        let proof = cm.proof_multi_index_commit(
+            &value_0,
+            values.iter().copied(),
+            &o,
+            &prf_base,
+            &prf,
+            None,
+            &pp,
+        );
         assert!(cm
-            .verify_proof_multi_index_commit(&prf_base, &prf, &proof, &pp)
+            .verify_proof_multi_index_commit(&prf_base, &prf, None, &proof, &pp)
             .is_ok());
     }
 }

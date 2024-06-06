@@ -230,15 +230,6 @@ pub fn appcred(
     let zeta = q.iter().map(|idx| &signatures[*idx]).sum::<Signature>()
         + (&pp.atact_pp.pk * tau_opening.r);
 
-    let pi = tau.proof_multi_index_commit(
-        &prv_u.k,
-        q.iter().map(|idx| (*idx, attributes[*idx])),
-        &tau_opening,
-        &prf_base,
-        &prf,
-        &pp.pedersen_pp,
-    );
-
     let pp2 = get_parameters();
 
     let g1_1_vars = vec![zeta.0 .0.into()];
@@ -263,6 +254,16 @@ pub fn appcred(
     };
     let gs_pi_1 = equ_1.commit_and_prove(&g1_1_vars, &g2_2_vars, &pp.crs, &mut rng);
 
+    let pi = tau.proof_multi_index_commit(
+        &prv_u.k,
+        q.iter().map(|idx| (*idx, attributes[*idx])),
+        &tau_opening,
+        &prf_base,
+        &prf,
+        Some(&gs_pi_1),
+        &pp.pedersen_pp,
+    );
+
     Ok((
         Credential { tau, prf },
         Proof {
@@ -282,6 +283,7 @@ pub fn verifycred(
     cred.tau.verify_proof_multi_index_commit(
         &hash_with_domain_separation(msg, b"PRF"),
         &cred.prf,
+        Some(&pi.gs_pi_1),
         &pi.pi,
         &pp.pedersen_pp,
     )?;
@@ -312,9 +314,9 @@ pub fn verifycred(
         target: target_1 * target_2,
     };
     if equ_1.verify(&pi.gs_pi_1, &pp.crs) {
-        Ok(())
-    } else {
         Err(S3IDError::InvalidCredential)
+    } else {
+        Ok(())
     }
 }
 
