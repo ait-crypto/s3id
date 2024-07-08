@@ -7,6 +7,7 @@ use ark_bls12_381::Bls12_381;
 use ark_ec::PairingEngine;
 use ark_ff::{UniformRand, Zero};
 use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use sha2::Digest;
 
 pub type G1Affine = <Bls12_381 as PairingEngine>::G1Affine;
@@ -22,7 +23,7 @@ fn hash_with_domain_separation_1(msg: &[u8], domain_separator: &[u8]) -> G1Proje
     digest.update(domain_separator);
     digest.update(msg);
 
-    let mut rng = rand_chacha::ChaCha20Rng::from_seed(digest.finalize().into());
+    let mut rng = ChaCha20Rng::from_seed(digest.finalize().into());
     G1Projective::rand(&mut rng)
 }
 
@@ -32,7 +33,7 @@ fn hash_with_domain_separation_2(msg: &[u8], domain_separator: &[u8]) -> G2Proje
     digest.update(domain_separator);
     digest.update(msg);
 
-    let mut rng = rand_chacha::ChaCha20Rng::from_seed(digest.finalize().into());
+    let mut rng = ChaCha20Rng::from_seed(digest.finalize().into());
     G2Projective::rand(&mut rng)
 }
 

@@ -1,5 +1,5 @@
 use ark_ff::{UniformRand, Zero};
-use groth_sahai::{prover::Provable, verifier::Verifiable, AbstractCrs, Matrix};
+use groth_sahai::{prover::Provable, verifier::Verifiable, AbstractCrs};
 use rand::thread_rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use thiserror::Error;
@@ -248,7 +248,7 @@ pub fn appcred(
     let a_consts = vec![pp2.g.0.into()];
     let b_consts = vec![pp2.g.1.into()];
 
-    let gamma: Matrix<_> = vec![vec![Scalar::zero()]];
+    let gamma = vec![vec![Scalar::zero()]];
 
     let target_1 = pairing(&zeta.0, &pp2.g);
     let target_2 = pairing(&pp2.g, &zeta.0);
@@ -274,14 +274,7 @@ pub fn appcred(
         &pp.pedersen_pp,
     );
 
-    Ok((
-        Credential { tau, prf },
-        Proof {
-            pi,
-            gs_pi_1,
-            // gs_pi_2,
-        },
-    ))
+    Ok((Credential { tau, prf }, Proof { pi, gs_pi_1 }))
 }
 
 pub fn verifycred(
@@ -312,7 +305,7 @@ pub fn verifycred(
     let a_consts = vec![pp2.g.0.into()];
     let b_consts = vec![pp2.g.1.into()];
 
-    let gamma: Matrix<_> = vec![vec![Scalar::zero()]];
+    let gamma = vec![vec![Scalar::zero()]];
 
     let target_1 = pairing(&check, &pk.0);
     let target_2 = pairing(&pk.0, &check);
