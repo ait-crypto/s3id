@@ -86,6 +86,17 @@ pub struct UserSecretKey {
     cm_k_opening: Opening,
 }
 
+impl UserSecretKey {
+    fn prf_base(msg: &[u8]) -> G1G2 {
+        hash_with_domain_separation(msg, b"PRF")
+    }
+
+    fn prf(&self, msg: &[u8]) -> (G1G2, G1G2) {
+        let prf_base = Self::prf_base(msg);
+        (prf_base.clone(), prf_base * self.k)
+    }
+}
+
 pub fn dedup(
     pp: &PublicParameters,
     attribute: &Scalar,
@@ -224,8 +235,7 @@ pub fn appcred(
         &pp.pedersen_pp,
     );
 
-    let prf_base = hash_with_domain_separation(msg, b"PRF");
-    let prf = prf_base.clone() * prv_u.k;
+    let (prf_base, prf) = prv_u.prf(msg);
 
     let zeta = q.iter().map(|idx| &signatures[*idx]).sum::<Signature>()
         + (&pp.atact_pp.pk * tau_opening.r);
@@ -281,7 +291,7 @@ pub fn verifycred(
     pp: &PublicParameters,
 ) -> Result<(), S3IDError> {
     cred.tau.verify_proof_multi_index_commit(
-        &hash_with_domain_separation(msg, b"PRF"),
+        &UserSecretKey::prf_base(msg),
         &cred.prf,
         Some(&pi.gs_pi_1),
         &pi.pi,
