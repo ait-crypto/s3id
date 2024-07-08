@@ -1,7 +1,7 @@
 use ark_ff::{UniformRand, Zero};
 use groth_sahai::{prover::Provable, verifier::Verifiable, AbstractCrs};
 use rand::thread_rng;
-use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::{
@@ -147,20 +147,20 @@ pub fn microcred(
         return Err(S3IDError::InvalidAttributes);
     }
 
-    attributes
-        .iter()
-        .enumerate()
-        .par_bridge()
+    let indexed_attributes: Vec<_> = attributes.iter().enumerate().collect();
+
+    indexed_attributes
+        .par_iter()
         .map(|(idx, attribute)| -> Result<Signature, S3IDError> {
             // 10.a
-            let (cm_i, op_i) = Commitment::index_commit(&prv_u.k, idx, attribute, &pp.pedersen_pp);
+            let (cm_i, op_i) = Commitment::index_commit(&prv_u.k, *idx, attribute, &pp.pedersen_pp);
             // 10.b
             let pi_i = pp_u.cm_k.proof_index_commit(
                 &prv_u.k,
                 &prv_u.cm_k_opening,
                 &cm_i,
                 &prv_u.k,
-                idx,
+                *idx,
                 attribute,
                 &op_i,
                 &pp.pedersen_pp,
@@ -171,11 +171,12 @@ pub fn microcred(
                 .map(|issuer| -> Result<Signature, S3IDError> {
                     // 10.f
                     pp_u.cm_k
-                        .verify_proof_index_commit(&cm_i, idx, &pi_i, &pp.pedersen_pp)?;
+                        .verify_proof_index_commit(&cm_i, *idx, &pi_i, &pp.pedersen_pp)?;
 
                     // TODO: T_Dedup check
 
                     // 10.g
+                    // NOTE: sign with basis u_i, hence idx + 1
                     Ok(issuer.sk.as_ref().sign_pedersen_commitment(
                         &cm_i,
                         idx + 1,
@@ -187,6 +188,7 @@ pub fn microcred(
             let sigma_i =
                 Signature::from_shares(&signatures[..pp.atact_pp.t], &pp.atact_pp.lagrange_t);
             // sanity check
+            // NOTE: signed with basis u_i, hence idx + 1
             debug_assert!(pp
                 .atact_pp
                 .pk
@@ -295,7 +297,10 @@ pub fn verifycred(
         .pi
         .s_i
         .iter()
-        .map(|(idx, _)| &pp.atact_pp.tsw_pp[*idx + 1])
+        .map(|(idx, _)| {
+            // NOTE: signed with basis u_i, hence idx + 1
+            &pp.atact_pp.tsw_pp[*idx + 1]
+        })
         .sum();
     let pk = &pp.atact_pp.pk;
     let tau = &cred.tau;
