@@ -327,3 +327,52 @@ pub fn verifycred(
         Err(S3IDError::InvalidCredential)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use ark_ff::UniformRand;
+
+    #[test]
+    fn basic() {
+        let mut rng = thread_rng();
+
+        let num_issuers = 10;
+        let t = num_issuers / 2 + 1;
+        let n = 32;
+        let tprime = n / 2 + 1;
+        let big_l = 10;
+
+        let attribute = Scalar::rand(&mut rng);
+        let attributes: Vec<_> = (0..big_l).map(|_| Scalar::rand(&mut rng)).collect();
+        let attributes_subset: Vec<_> = (0..big_l)
+            .filter_map(|idx| {
+                if idx % 2 == 0 {
+                    Some(attributes[idx])
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let msg = b"some message";
+
+        let (pp, issuers) = setup(num_issuers, t, n, tprime, big_l).expect("setup failed");
+        let (pp_u, prv_u) = dedup(&pp, &attribute, &issuers).expect("dedup failed");
+
+        let signatures =
+            microcred(&attributes, &pp_u, &prv_u, &issuers, &pp).expect("microred failed");
+        let (cred, pi) = appcred(
+            &attributes,
+            &signatures,
+            &prv_u,
+            msg,
+            &attributes_subset,
+            &pp,
+        )
+        .expect("appcred failed");
+
+        assert_eq!(verifycred(&cred, &pi, msg, &pp), Ok(()));
+    }
+}
