@@ -34,10 +34,7 @@ fn bench_s3id(
     let (pp, issuers) = setup(num_issuers, t, n, tprime, big_l).expect("setup failed");
     c.bench_function("dedup", |b| {
         b.iter(|| {
-            #[allow(unused_must_use)]
-            {
-                black_box(dedup(&pp, &attribute, &issuers));
-            }
+            black_box(dedup(&pp, &attribute, &issuers)).unwrap();
         })
     });
 
@@ -47,10 +44,7 @@ fn bench_s3id(
     }
     c.bench_function("microcred", |b| {
         b.iter(|| {
-            #[allow(unused_must_use)]
-            {
-                black_box(microcred(&attributes, &pp_u, &prv_u, &issuers, &pp));
-            }
+            black_box(microcred(&attributes, &pp_u, &prv_u, &issuers, &pp)).unwrap();
         })
     });
     if n > 50 {
@@ -60,17 +54,15 @@ fn bench_s3id(
     let signatures = microcred(&attributes, &pp_u, &prv_u, &issuers, &pp).expect("microred failed");
     c.bench_function("appcred", |b| {
         b.iter(|| {
-            #[allow(unused_must_use)]
-            {
-                black_box(appcred(
-                    &attributes,
-                    &signatures,
-                    &prv_u,
-                    msg,
-                    &attributes_subset,
-                    &pp,
-                ));
-            }
+            black_box(appcred(
+                &attributes,
+                &signatures,
+                &prv_u,
+                msg,
+                &attributes_subset,
+                &pp,
+            ))
+            .unwrap();
         });
     });
 
@@ -85,10 +77,7 @@ fn bench_s3id(
     .expect("appcred failed");
     c.bench_function("verifycred", |b| {
         b.iter(|| {
-            #[allow(unused_must_use)]
-            {
-                black_box(verifycred(&cred, &pi, msg, &pp));
-            }
+            black_box(verifycred(&cred, &pi, msg, &pp)).unwrap();
         });
     });
 }

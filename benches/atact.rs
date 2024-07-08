@@ -12,10 +12,7 @@ fn bench_atact(c: &mut Criterion, num_issuers: usize, n: usize, t: usize, tprime
 
     c.bench_function("register", |b| {
         b.iter(|| {
-            #[allow(unused_must_use)]
-            {
-                black_box(register(&a, &pp));
-            }
+            black_box(register(&a, &pp)).unwrap();
         })
     });
 
@@ -25,10 +22,7 @@ fn bench_atact(c: &mut Criterion, num_issuers: usize, n: usize, t: usize, tprime
     }
     c.bench_function("token_request", |b| {
         b.iter(|| {
-            #[allow(unused_must_use)]
-            {
-                black_box(token_request(&strg, &cm, &pp));
-            }
+            black_box(token_request(&strg, &cm, &pp)).unwrap();
         })
     });
     if n > 50 {
@@ -38,10 +32,7 @@ fn bench_atact(c: &mut Criterion, num_issuers: usize, n: usize, t: usize, tprime
     let (blind_request, rand) = token_request(&strg, &cm, &pp).expect("token request failed");
     c.bench_function("tissue", |b| {
         b.iter(|| {
-            #[allow(unused_must_use)]
-            {
-                black_box(tissue(&blind_request, &issuers[0], &pp));
-            }
+            black_box(tissue(&blind_request, &issuers[0], &pp)).unwrap();
         });
     });
 
@@ -65,10 +56,7 @@ fn bench_atact(c: &mut Criterion, num_issuers: usize, n: usize, t: usize, tprime
     let token_proof = prove(&token, &rand, &pp);
     c.bench_function("verify", |b| {
         b.iter(|| {
-            #[allow(unused_must_use)]
-            {
-                black_box(verify(&token, &token_proof, &blind_request, &pp));
-            }
+            black_box(verify(&token, &token_proof, &blind_request, &pp)).unwrap();
         });
     });
 }
