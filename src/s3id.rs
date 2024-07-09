@@ -8,7 +8,7 @@ use crate::{
     atact::{self, AtACTError, Token},
     bls381_helpers::{
         gs::{CProof, CRS, PPE},
-        hash_with_domain_separation, pairing, Scalar, G1G2,
+        hash_with_domain_separation, pairing_product, Scalar, G1G2,
     },
     pedersen::{
         self, get_parameters, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
@@ -39,7 +39,7 @@ pub struct Issuer {
     sk: atact::Issuer,
     // FIXME: The use of T_dedup to check for duplicate tokens is not
     // implemented. Checking it would make benchmarking harder. Performance-wise
-    // it makes not significant difference.
+    // it does not make a significant difference.
     _t_dedup: (),
 }
 
@@ -75,24 +75,25 @@ pub fn setup(
 }
 
 pub struct UserPublicParameters {
+    // FIXME: token is only used for the deduplication check which is currently
+    // not implemented as it would complicat benchmarking
     _token: Token,
     cm_k: Commitment,
-    // idx
+}
+
+fn prf_base(msg: &[u8]) -> G1G2 {
+    hash_with_domain_separation(msg, b"PRF")
 }
 
 pub struct UserSecretKey {
     k: Scalar,
-    // TODO: fix in paper
     cm_k_opening: Opening,
 }
 
 impl UserSecretKey {
-    fn prf_base(msg: &[u8]) -> G1G2 {
-        hash_with_domain_separation(msg, b"PRF")
-    }
-
+    // Evaluate PRF and return base point (`H(m)`) and the result (`H(m)^k`)
     fn prf(&self, msg: &[u8]) -> (G1G2, G1G2) {
-        let prf_base = Self::prf_base(msg);
+        let prf_base = prf_base(msg);
         (prf_base.clone(), prf_base * self.k)
     }
 }
@@ -147,6 +148,8 @@ pub fn microcred(
         return Err(S3IDError::InvalidAttributes);
     }
 
+    // first produce attributes with their indices to enable parallel iteration
+    // `attributes.iter().enumerate().par_bridge()` is not stable!
     let indexed_attributes: Vec<_> = attributes.iter().enumerate().collect();
 
     indexed_attributes
@@ -208,7 +211,6 @@ pub struct Credential {
 pub struct Proof {
     pi: ProofMultiIndex,
     gs_pi_1: CProof,
-    // gs_pi_2: CProof,
 }
 
 pub fn appcred(
@@ -249,11 +251,8 @@ pub fn appcred(
 
     let a_consts = vec![pp2.g.0.into()];
     let b_consts = vec![pp2.g.1.into()];
-
     let gamma = vec![vec![Scalar::zero()]];
-
-    let target_1 = pairing(&zeta.0, &pp2.g);
-    let target_2 = pairing(&pp2.g, &zeta.0);
+    let target = pairing_product(&[(&zeta.0, &pp2.g), (&pp2.g, &zeta.0)]);
 
     // this is limitation of the GS implementation, we can only do one equation
     // where both variables in G1 and G2 are used; hence we prove the product of
@@ -261,8 +260,8 @@ pub fn appcred(
     let equ_1 = PPE {
         a_consts,
         b_consts,
-        gamma: gamma.clone(),
-        target: target_1 * target_2,
+        gamma,
+        target,
     };
     let gs_pi_1 = equ_1.commit_and_prove(&g1_1_vars, &g2_2_vars, &pp.crs, &mut rng);
 
@@ -286,7 +285,7 @@ pub fn verifycred(
     pp: &PublicParameters,
 ) -> Result<(), S3IDError> {
     cred.tau.verify_proof_multi_index_commit(
-        &UserSecretKey::prf_base(msg),
+        &prf_base(msg),
         &cred.prf,
         Some(&pi.gs_pi_1),
         &pi.pi,
@@ -309,17 +308,14 @@ pub fn verifycred(
 
     let a_consts = vec![pp2.g.0.into()];
     let b_consts = vec![pp2.g.1.into()];
-
     let gamma = vec![vec![Scalar::zero()]];
-
-    let target_1 = pairing(&check, &pk.0);
-    let target_2 = pairing(&pk.0, &check);
+    let target = pairing_product(&[(&check, &pk.0), (&pk.0, &check)]);
 
     let equ_1 = PPE {
         a_consts,
         b_consts,
         gamma,
-        target: target_1 * target_2,
+        target,
     };
     if equ_1.verify(&pi.gs_pi_1, &pp.crs) {
         Ok(())
@@ -374,5 +370,6 @@ mod test {
         .expect("appcred failed");
 
         assert_eq!(verifycred(&cred, &pi, msg, &pp), Ok(()));
+        assert!(verifycred(&cred, &pi, b"some other message", &pp).is_err());
     }
 }
