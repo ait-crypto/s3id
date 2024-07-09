@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     iter::Sum,
     ops::{Add, Mul, Neg, Sub},
 };
@@ -51,6 +52,7 @@ pub fn hash_usize(size: usize) -> G1G2 {
     hash_with_domain_separation(&bytes, b"hash-usize")
 }
 
+#[allow(dead_code)]
 #[inline]
 pub fn pairing(lhs: &G1G2, rhs: &G1G2) -> Gt {
     Bls12_381::pairing(lhs.0, rhs.1)
@@ -84,36 +86,27 @@ impl G1G2 {
     }
 }
 
-impl Add for G1G2 {
+impl<G> Add<G> for G1G2
+where
+    G: Borrow<G1G2>,
+{
     type Output = G1G2;
 
-    fn add(self, rhs: G1G2) -> Self::Output {
+    fn add(self, rhs: G) -> Self::Output {
+        let rhs = rhs.borrow();
         G1G2(self.0 + rhs.0, self.1 + rhs.1)
     }
 }
 
-impl Add<&G1G2> for G1G2 {
+impl<G> Add<G> for &G1G2
+where
+    G: Borrow<G1G2>,
+{
     type Output = G1G2;
 
-    fn add(self, rhs: &G1G2) -> Self::Output {
+    fn add(self, rhs: G) -> Self::Output {
+        let rhs = rhs.borrow();
         G1G2(self.0 + rhs.0, self.1 + rhs.1)
-    }
-}
-
-impl Add for &G1G2 {
-    type Output = G1G2;
-
-    fn add(self, rhs: &G1G2) -> Self::Output {
-        G1G2(self.0 + rhs.0, self.1 + rhs.1)
-    }
-}
-
-impl Add<G1G2> for &G1G2 {
-    type Output = G1G2;
-
-    #[inline(always)]
-    fn add(self, rhs: G1G2) -> Self::Output {
-        rhs + self
     }
 }
 
@@ -133,45 +126,41 @@ impl Neg for &G1G2 {
     }
 }
 
-impl Sub for G1G2 {
+impl<G> Sub<G> for G1G2
+where
+    G: Borrow<G1G2>,
+{
     type Output = G1G2;
 
-    fn sub(self, rhs: G1G2) -> Self::Output {
+    fn sub(self, rhs: G) -> Self::Output {
+        let rhs = rhs.borrow();
         G1G2(self.0 - rhs.0, self.1 - rhs.1)
     }
 }
 
-impl Sub<&G1G2> for G1G2 {
+impl<G> Sub<G> for &G1G2
+where
+    G: Borrow<G1G2>,
+{
     type Output = G1G2;
 
-    fn sub(self, rhs: &G1G2) -> Self::Output {
+    fn sub(self, rhs: G) -> Self::Output {
+        let rhs = rhs.borrow();
         G1G2(self.0 - rhs.0, self.1 - rhs.1)
     }
 }
 
-impl Sub<&G1G2> for &G1G2 {
-    type Output = G1G2;
-
-    fn sub(self, rhs: &G1G2) -> Self::Output {
-        G1G2(self.0 - rhs.0, self.1 - rhs.1)
-    }
-}
-
-impl<'a> Sum<&'a G1G2> for G1G2 {
-    fn sum<I: Iterator<Item = &'a G1G2>>(iter: I) -> Self {
+impl<G> Sum<G> for G1G2
+where
+    G: Borrow<G1G2>,
+{
+    fn sum<I: Iterator<Item = G>>(iter: I) -> Self {
         let (g_1, g_2) = iter.fold(
             (G1Projective::zero(), G2Projective::zero()),
-            |(acc_1, acc_2), g1g2| (acc_1 + g1g2.0, acc_2 + g1g2.1),
-        );
-        G1G2(g_1, g_2)
-    }
-}
-
-impl Sum<G1G2> for G1G2 {
-    fn sum<I: Iterator<Item = G1G2>>(iter: I) -> Self {
-        let (g_1, g_2) = iter.fold(
-            (G1Projective::zero(), G2Projective::zero()),
-            |(acc_1, acc_2), g1g2| (acc_1 + g1g2.0, acc_2 + g1g2.1),
+            |(acc_1, acc_2), g1g2| {
+                let g1g2 = g1g2.borrow();
+                (acc_1 + g1g2.0, acc_2 + g1g2.1)
+            },
         );
         G1G2(g_1, g_2)
     }
@@ -187,7 +176,7 @@ impl Mul<Scalar> for G1G2 {
     }
 }
 
-/*/
+/*
 impl Mul<&Scalar> for G1G2 {
     type Output = G1G2;
 
