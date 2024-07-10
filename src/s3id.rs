@@ -340,16 +340,6 @@ mod test {
 
         let attribute = Scalar::rand(&mut rng);
         let attributes: Vec<_> = (0..big_l).map(|_| Scalar::rand(&mut rng)).collect();
-        let attributes_subset: Vec<_> = (0..big_l)
-            .filter_map(|idx| {
-                if idx % 2 == 0 {
-                    Some(attributes[idx])
-                } else {
-                    None
-                }
-            })
-            .collect();
-
         let msg = b"some message";
 
         let (pp, issuers) = setup(num_issuers, t, n, tprime, big_l).expect("setup failed");
@@ -357,18 +347,31 @@ mod test {
 
         let signatures =
             microcred(&attributes, &pp_u, &prv_u, &issuers, &pp).expect("microred failed");
-        let (cred, pi) = appcred(
-            &attributes,
-            &signatures,
-            &prv_u,
-            msg,
-            &attributes_subset,
-            &pp,
-        )
-        .expect("appcred failed");
 
-        assert_eq!(verifycred(&cred, &pi, msg, &pp), Ok(()));
-        assert!(verifycred(&cred, &pi, b"some other message", &pp).is_err());
+        for selector in [2, 3, 4] {
+            let attributes_subset: Vec<_> = (0..big_l)
+                .filter_map(|idx| {
+                    if idx % selector == 0 {
+                        Some(attributes[idx])
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            let (cred, pi) = appcred(
+                &attributes,
+                &signatures,
+                &prv_u,
+                msg,
+                &attributes_subset,
+                &pp,
+            )
+            .expect("appcred failed");
+
+            assert_eq!(verifycred(&cred, &pi, msg, &pp), Ok(()));
+            assert!(verifycred(&cred, &pi, b"some other message", &pp).is_err());
+        }
     }
 
     #[test]
