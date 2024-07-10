@@ -693,11 +693,12 @@ mod test {
 
     #[test]
     fn pedersen_proof_2_pk() {
+        let mut rng = rand::thread_rng();
         let pp = get_parameters();
-        let msg_1 = Scalar::rand(&mut rand::thread_rng());
+        let msg_1 = Scalar::rand(&mut rng);
         let (cm_1, o_1) = Commitment::commit(&msg_1);
         assert!(cm_1.verify(&msg_1, &o_1).is_ok());
-        let msg_2 = Scalar::rand(&mut rand::thread_rng());
+        let msg_2 = Scalar::rand(&mut rng);
         let (cm_2, o_2) = Commitment::commit(&msg_2);
         assert!(cm_2.verify(&msg_2, &o_2).is_ok());
 
@@ -710,12 +711,13 @@ mod test {
 
     #[test]
     fn multi_pedersen() {
+        let mut rng = rand::thread_rng();
         let l = 10;
         let pp = MultiBasePublicParameters::new(l);
 
-        let value_0 = Scalar::rand(&mut rand::thread_rng());
+        let value_0 = Scalar::rand(&mut rng);
         for idx in 0..l {
-            let value_i = Scalar::rand(&mut rand::thread_rng());
+            let value_i = Scalar::rand(&mut rng);
             let (cm, o) = Commitment::index_commit(&value_0, idx, &value_i, &pp);
             assert!(cm
                 .verify_index_commit(&value_0, idx, &value_i, &o, &pp)
@@ -725,15 +727,16 @@ mod test {
 
     #[test]
     fn multi_pedersen_proof() {
-        let msg = Scalar::rand(&mut rand::thread_rng());
+        let mut rng = rand::thread_rng();
+        let msg = Scalar::rand(&mut rng);
         let (commitment, opening) = Commitment::commit(&msg);
 
         let l = 10;
         let pp = MultiBasePublicParameters::new(l);
 
-        let value_0 = Scalar::rand(&mut rand::thread_rng());
+        let value_0 = Scalar::rand(&mut rng);
         for idx in 0..l {
-            let value_i = Scalar::rand(&mut rand::thread_rng());
+            let value_i = Scalar::rand(&mut rng);
             let (cm, o) = Commitment::index_commit(&value_0, idx, &value_i, &pp);
             assert!(cm
                 .verify_index_commit(&value_0, idx, &value_i, &o, &pp)
@@ -749,13 +752,14 @@ mod test {
 
     #[test]
     fn multi_index_pedersen() {
+        let mut rng = rand::thread_rng();
         let l = 10;
         let pp = MultiBasePublicParameters::new(l);
 
-        let value_0 = Scalar::rand(&mut rand::thread_rng());
+        let value_0 = Scalar::rand(&mut rng);
         let values = [
-            (2usize, Scalar::rand(&mut rand::thread_rng())),
-            (7usize, Scalar::rand(&mut rand::thread_rng())),
+            (2usize, Scalar::rand(&mut rng)),
+            (7usize, Scalar::rand(&mut rng)),
         ];
         let (cm, o) = Commitment::multi_index_commit(&value_0, values.iter().copied(), &pp);
         assert!(cm
@@ -765,13 +769,14 @@ mod test {
 
     #[test]
     fn multi_index_pedersen_proof() {
+        let mut rng = rand::thread_rng();
         let l = 10;
         let pp = MultiBasePublicParameters::new(l);
 
-        let value_0 = Scalar::rand(&mut rand::thread_rng());
+        let value_0 = Scalar::rand(&mut rng);
         let values = [
-            (2usize, Scalar::rand(&mut rand::thread_rng())),
-            (7usize, Scalar::rand(&mut rand::thread_rng())),
+            (2usize, Scalar::rand(&mut rng)),
+            (7usize, Scalar::rand(&mut rng)),
         ];
         let (cm, o) = Commitment::multi_index_commit(&value_0, values.iter().copied(), &pp);
         assert!(cm

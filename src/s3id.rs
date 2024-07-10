@@ -8,7 +8,7 @@ use crate::{
     atact::{self, AtACTError, Token},
     bls381_helpers::{
         gs::{CProof, CRS, PPE},
-        hash_with_domain_separation, pairing_product, Scalar, G1G2,
+        hash_with_domain_separation, pairing_product, Gt, Scalar, G1G2,
     },
     pedersen::{
         self, get_parameters, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
@@ -213,6 +213,21 @@ pub struct Proof {
     gs_pi_1: CProof,
 }
 
+fn setup_ppe(target: Gt) -> PPE {
+    let pp2 = get_parameters();
+
+    let a_consts = vec![pp2.g.0.into()];
+    let b_consts = vec![pp2.g.1.into()];
+    let gamma = vec![vec![Scalar::zero()]];
+
+    PPE {
+        a_consts,
+        b_consts,
+        gamma,
+        target,
+    }
+}
+
 pub fn appcred(
     attributes: &[Scalar],
     signatures: &[Signature],
@@ -249,20 +264,12 @@ pub fn appcred(
     let g1_1_vars = vec![zeta.0 .0.into()];
     let g2_2_vars = vec![zeta.0 .1.into()];
 
-    let a_consts = vec![pp2.g.0.into()];
-    let b_consts = vec![pp2.g.1.into()];
-    let gamma = vec![vec![Scalar::zero()]];
     let target = pairing_product(&[(&zeta.0, &pp2.g), (&pp2.g, &zeta.0)]);
 
     // this is limitation of the GS implementation, we can only do one equation
     // where both variables in G1 and G2 are used; hence we prove the product of
     // these two equations to understand the performance characteristics
-    let equ_1 = PPE {
-        a_consts,
-        b_consts,
-        gamma,
-        target,
-    };
+    let equ_1 = setup_ppe(target);
     let gs_pi_1 = equ_1.commit_and_prove(&g1_1_vars, &g2_2_vars, &pp.crs, &mut rng);
 
     let pi = tau.proof_multi_index_commit(
@@ -303,20 +310,11 @@ pub fn verifycred(
         .sum();
     let pk = &pp.atact_pp.pk;
     let tau = &cred.tau;
-    let pp2 = get_parameters();
     let check = h + &tau.0;
 
-    let a_consts = vec![pp2.g.0.into()];
-    let b_consts = vec![pp2.g.1.into()];
-    let gamma = vec![vec![Scalar::zero()]];
     let target = pairing_product(&[(&check, &pk.0), (&pk.0, &check)]);
 
-    let equ_1 = PPE {
-        a_consts,
-        b_consts,
-        gamma,
-        target,
-    };
+    let equ_1 = setup_ppe(target);
     if equ_1.verify(&pi.gs_pi_1, &pp.crs) {
         Ok(())
     } else {
