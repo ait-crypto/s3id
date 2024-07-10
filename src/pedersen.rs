@@ -141,7 +141,6 @@ where
     hash_g1g2(hasher, &pp.u);
 }
 
-#[inline]
 fn hash_gs<D>(hasher: &mut D, proof: &CProof)
 where
     D: Digest,
@@ -150,23 +149,29 @@ where
     proof.xcoms.coms.iter().for_each(|com| {
         com.0.serialize_uncompressed(&mut storage).unwrap();
         com.1.serialize_uncompressed(&mut storage).unwrap();
+        hasher.update(&storage);
+        storage.clear();
     });
     proof.ycoms.coms.iter().for_each(|com| {
         com.0.serialize_uncompressed(&mut storage).unwrap();
         com.1.serialize_uncompressed(&mut storage).unwrap();
+        hasher.update(&storage);
+        storage.clear();
     });
     proof.equ_proofs.iter().for_each(|prf| {
-        let mut storage = Vec::new();
         prf.pi.iter().for_each(|com| {
             com.0.serialize_uncompressed(&mut storage).unwrap();
             com.1.serialize_uncompressed(&mut storage).unwrap();
+            hasher.update(&storage);
+            storage.clear();
         });
         prf.theta.iter().for_each(|com| {
             com.0.serialize_uncompressed(&mut storage).unwrap();
             com.1.serialize_uncompressed(&mut storage).unwrap();
+            hasher.update(&storage);
+            storage.clear();
         });
     });
-    hasher.update(&storage);
 }
 
 #[inline]
