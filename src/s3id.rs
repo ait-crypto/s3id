@@ -27,7 +27,7 @@ pub struct PublicParameters {
 pub enum S3IDError {
     #[error("AtACT error: {0}")]
     AtACT(#[from] AtACTError),
-    #[error("Pedersen commitment erro: {0}")]
+    #[error("Pedersen commitment error: {0}")]
     Pedersen(#[from] pedersen::Error),
     #[error("Invalid attributes")]
     InvalidAttributes,
