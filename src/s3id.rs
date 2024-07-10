@@ -370,4 +370,27 @@ mod test {
         assert_eq!(verifycred(&cred, &pi, msg, &pp), Ok(()));
         assert!(verifycred(&cred, &pi, b"some other message", &pp).is_err());
     }
+
+    #[test]
+    fn parameters_for_benches() {
+        const NUM_ISSUERS: [usize; 3] = [4, 16, 64];
+        const N: [usize; 3] = [30, 40, 128];
+        const BIG_L: usize = 16;
+
+        for num_issuers in NUM_ISSUERS {
+            for n in N {
+                let t = num_issuers / 2 + 1;
+                let tprime = n / 2 + 1;
+
+                assert!(
+                    setup(num_issuers, t, n, tprime, BIG_L).is_ok(),
+                    "issuers {}, t {}, n {}, t' {}",
+                    num_issuers,
+                    t,
+                    n,
+                    tprime
+                );
+            }
+        }
+    }
 }
