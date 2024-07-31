@@ -4,12 +4,12 @@ use std::{
     ops::{Add, Index, Mul, Sub},
 };
 
-use ark_ff::{Field, One, UniformRand};
+use ark_ff::{Field, UniformRand, Zero};
 use rand::thread_rng;
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{hash_usize, pairing_product, Scalar, G1G2},
+    bls381_helpers::{hash_usize, multi_pairing, Scalar, G1G2},
     lagrange::Lagrange,
     pedersen::{get_parameters, Commitment},
 };
@@ -129,8 +129,8 @@ impl PublicKey {
 
         let check = -(&pp[index] + &commitment.0);
 
-        if pairing_product(&[(&check, &self.0), (&signature.0, &pedersen_pp.g)]).is_one()
-            && pairing_product(&[(&self.0, &check), (&pedersen_pp.g, &signature.0)]).is_one()
+        if multi_pairing(&[(&check, &self.0), (&signature.0, &pedersen_pp.g)]).is_zero()
+            && multi_pairing(&[(&self.0, &check), (&pedersen_pp.g, &signature.0)]).is_zero()
         {
             Ok(())
         } else {
@@ -155,7 +155,7 @@ impl Signature {
 impl PublicKey {
     pub fn is_valid(&self) -> bool {
         let pp = get_parameters();
-        pairing_product(&[(&-&self.0, &pp.g), (&pp.g, &self.0)]).is_one()
+        multi_pairing(&[(&-&self.0, &pp.g), (&pp.g, &self.0)]).is_zero()
     }
 }
 

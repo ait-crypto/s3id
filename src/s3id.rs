@@ -8,7 +8,7 @@ use crate::{
     atact::{self, AtACTError, Token},
     bls381_helpers::{
         gs::{CProof, CRS, PPE},
-        hash_with_domain_separation, pairing_product, Gt, Scalar, G1G2,
+        hash_with_domain_separation, multi_pairing, Gt, Scalar, G1G2,
     },
     pedersen::{
         self, get_parameters, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
@@ -264,7 +264,7 @@ pub fn appcred(
     let g1_1_vars = vec![zeta.0 .0.into()];
     let g2_2_vars = vec![zeta.0 .1.into()];
 
-    let target = pairing_product(&[(&zeta.0, &pp2.g), (&pp2.g, &zeta.0)]);
+    let target = multi_pairing(&[(&zeta.0, &pp2.g), (&pp2.g, &zeta.0)]);
 
     // this is limitation of the GS implementation, we can only do one equation
     // where both variables in G1 and G2 are used; hence we prove the product of
@@ -312,7 +312,7 @@ pub fn verifycred(
     let tau = &cred.tau;
     let check = h + &tau.0;
 
-    let target = pairing_product(&[(&check, &pk.0), (&pk.0, &check)]);
+    let target = multi_pairing(&[(&check, &pk.0), (&pk.0, &check)]);
 
     let equ_1 = setup_ppe(target);
     if equ_1.verify(&pi.gs_pi_1, &pp.crs) {

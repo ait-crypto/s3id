@@ -1,11 +1,11 @@
-use ark_ff::{Field, One, UniformRand};
+use ark_ff::{Field, UniformRand, Zero};
 use ark_serialize::CanonicalSerialize;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{pairing_product, Scalar},
+    bls381_helpers::{multi_pairing, Scalar},
     lagrange::Lagrange,
     pedersen::{Commitment, Proof2PK},
     tsw::{self, PublicKey, SecretKey, Signature},
@@ -345,8 +345,8 @@ pub fn verify(
         .map(|k| &token_proof.ss[k] * pp.lagrange_tprime.eval_j_0(k))
         .sum();
     let sk_prod = -sk_prod.0;
-    if !pairing_product(&[(&token.s.0, &token_proof.pk_prime.0), (&sk_prod, &pp.pk.0)]).is_one()
-        || !pairing_product(&[(&token_proof.pk_prime.0, &token.s.0), (&pp.pk.0, &sk_prod)]).is_one()
+    if !multi_pairing(&[(&token.s.0, &token_proof.pk_prime.0), (&sk_prod, &pp.pk.0)]).is_zero()
+        || !multi_pairing(&[(&token_proof.pk_prime.0, &token.s.0), (&pp.pk.0, &sk_prod)]).is_zero()
     {
         return Err(AtACTError::InvalidToken);
     }
