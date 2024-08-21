@@ -162,9 +162,9 @@ fn bench_s3id_attibute_sizes(
 const NUM_ISSUERS: [usize; 3] = [4, 16, 64];
 const NS: [usize; 3] = [30, 40, 128];
 const BIG_LS: [usize; 3] = [16, 32, 64];
-const BIG_L: usize = BIG_LS[0];
 
 fn bench_params(c: &mut Criterion) {
+    const BIG_L: usize = BIG_LS[0];
     for num_issuers in NUM_ISSUERS {
         for n in NS {
             let t = num_issuers / 2 + 1;
