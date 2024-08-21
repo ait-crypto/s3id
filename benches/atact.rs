@@ -69,7 +69,7 @@ fn bench_params(c: &mut Criterion) {
         for n in N {
             let t = num_issuers / 2 + 1;
             let tprime = n / 2 + 1;
-            bench_atact(c, num_issuers, n, t, tprime)
+            bench_atact(c, num_issuers, n, t, tprime);
         }
     }
 }
