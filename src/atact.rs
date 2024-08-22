@@ -135,18 +135,17 @@ pub fn token_request(
     // Step 9
     let pk_r = &pp.pk * strg.r;
 
-    let mut base_points: Vec<_> = (1..=pp.tprime - 1)
-        .map(|i| Scalar::from(i as u64))
-        .collect();
-    base_points.push(Scalar::from(pp.tprime as u64));
+    let base_points: Vec<_> = (1..=pp.tprime as u64).map(Scalar::from).collect();
     let mut lagrange = Lagrange::new(&base_points);
 
     for k in pp.tprime..=pp.n {
         if k != pp.tprime {
             lagrange.update_point(pp.tprime - 1, Scalar::from(k as u64));
         }
-        // SAFETY: this is always non-0
-        let lk_i = lagrange.eval_j_0(pp.tprime - 1).inverse().unwrap();
+        let lk_i = lagrange
+            .eval_j_0(pp.tprime - 1)
+            .inverse()
+            .ok_or(AtACTError::UnknownError)?;
 
         let base_com = commitment
             - &coms
@@ -414,6 +413,8 @@ pub enum AtACTError {
     InvalidZKProof,
     #[error("Invalid token proof: {0:?}")]
     InvalidProof(Vec<AtACTError>),
+    #[error("Unknown error")]
+    UnknownError,
 }
 
 #[cfg(test)]
