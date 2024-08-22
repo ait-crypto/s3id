@@ -54,20 +54,20 @@ pub fn setup(
         t,
         tprime,
         lagrange_n: Lagrange::new(
-            (1..=n)
-                .map(|i| Scalar::from(i as u64))
+            (1..=n as u64)
+                .map(Scalar::from)
                 .collect::<Vec<_>>()
                 .as_ref(),
         ),
         lagrange_t: Lagrange::new(
-            (1..=t)
-                .map(|i| Scalar::from(i as u64))
+            (1..=t as u64)
+                .map(Scalar::from)
                 .collect::<Vec<_>>()
                 .as_ref(),
         ),
         lagrange_tprime: Lagrange::new(
-            (1..=tprime)
-                .map(|i| Scalar::from(i as u64))
+            (1..=tprime as u64)
+                .map(Scalar::from)
                 .collect::<Vec<_>>()
                 .as_ref(),
         ),
