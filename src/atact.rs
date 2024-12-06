@@ -1,3 +1,5 @@
+use std::cmp::max;
+
 use ark_ff::{Field, UniformRand, Zero};
 use ark_serialize::CanonicalSerialize;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -47,30 +49,16 @@ pub fn setup(
 
     let sk = SecretKey::new();
     let pk = sk.to_public_key();
+    let scalars: Vec<_> = (1..=max(n, t) as u64).map(Scalar::from).collect();
 
     let pp = PublicParameters {
         pk,
         n,
         t,
         tprime,
-        lagrange_n: Lagrange::new(
-            (1..=n as u64)
-                .map(Scalar::from)
-                .collect::<Vec<_>>()
-                .as_ref(),
-        ),
-        lagrange_t: Lagrange::new(
-            (1..=t as u64)
-                .map(Scalar::from)
-                .collect::<Vec<_>>()
-                .as_ref(),
-        ),
-        lagrange_tprime: Lagrange::new(
-            (1..=tprime as u64)
-                .map(Scalar::from)
-                .collect::<Vec<_>>()
-                .as_ref(),
-        ),
+        lagrange_n: Lagrange::new(&scalars[..n]),
+        lagrange_t: Lagrange::new(&scalars[..t]),
+        lagrange_tprime: Lagrange::new(&scalars[..tprime]),
         tsw_pp: tsw::PublicParameters::new(l + 1),
     };
 
@@ -96,7 +84,7 @@ pub fn register(a: &Scalar, _pp: &PublicParameters) -> Result<(StRG, Commitment)
     Ok((
         StRG {
             a: *a,
-            r: *opening.as_ref(),
+            r: opening.r,
         },
         cm,
     ))
@@ -129,7 +117,7 @@ pub fn token_request(
         let ak = Scalar::rand(&mut rng);
         let (cm_k, o_k) = Commitment::commit(&ak);
         coms.push(cm_k);
-        rks.push(&pp.pk * *o_k.as_ref());
+        rks.push(&pp.pk * o_k.r);
     }
 
     // Step 9
@@ -180,7 +168,7 @@ pub fn token_request(
             strg: strg.clone(),
             r_ks: rks,
             bold_k,
-            bold_rk: *bold_cm_opening.as_ref(),
+            bold_rk: bold_cm_opening.r,
         },
     ))
 }

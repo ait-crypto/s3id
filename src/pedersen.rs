@@ -72,12 +72,6 @@ pub struct Opening {
     pub(crate) r: Scalar,
 }
 
-impl AsRef<Scalar> for Opening {
-    fn as_ref(&self) -> &Scalar {
-        &self.r
-    }
-}
-
 pub struct Proof {
     t: G1G2,
     s_1: Scalar,

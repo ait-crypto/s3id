@@ -198,7 +198,7 @@ pub fn microcred(
                 .verify_pedersen_commitment(&cm_i, idx + 1, &sigma_i, &pp.atact_pp.tsw_pp)
                 .is_ok());
             // 10.i
-            Ok(&sigma_i + &(&pp.atact_pp.pk * -*op_i.as_ref()))
+            Ok(&sigma_i + &(&pp.atact_pp.pk * -op_i.r))
         })
         .collect::<Result<Vec<_>, _>>()
 }
@@ -238,7 +238,7 @@ pub fn appcred(
 ) -> Result<(Credential, Proof), S3IDError> {
     let mut rng = thread_rng();
 
-    let q: Vec<_> = attribute_subset
+    let q = attribute_subset
         .iter()
         .map(|attribute| {
             attributes
