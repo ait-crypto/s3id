@@ -465,11 +465,7 @@ mod test {
 
                 assert!(
                     setup(num_issuers, n, t, tprime, 1).is_ok(),
-                    "issuers {}, t {}, n {}, t' {}",
-                    num_issuers,
-                    t,
-                    n,
-                    tprime
+                    "issuers {num_issuers}, t {t}, n {n}, t' {tprime}"
                 );
             }
         }

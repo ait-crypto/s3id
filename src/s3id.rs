@@ -213,7 +213,7 @@ pub struct Proof {
     gs_pi_1: CProof,
 }
 
-fn setup_ppe(target: Gt) -> PPE {
+fn setup_ppe(target: &Gt) -> PPE {
     let pp2 = get_parameters();
 
     let a_consts = vec![pp2.g.0.into()];
@@ -224,7 +224,7 @@ fn setup_ppe(target: Gt) -> PPE {
         a_consts,
         b_consts,
         gamma,
-        target,
+        target: *target,
     }
 }
 
@@ -269,7 +269,7 @@ pub fn appcred(
     // this is limitation of the GS implementation, we can only do one equation
     // where both variables in G1 and G2 are used; hence we prove the product of
     // these two equations to understand the performance characteristics
-    let equ_1 = setup_ppe(target);
+    let equ_1 = setup_ppe(&target);
     let gs_pi_1 = equ_1.commit_and_prove(&g1_1_vars, &g2_2_vars, &pp.crs, &mut rng);
 
     let pi = tau.proof_multi_index_commit(
@@ -314,7 +314,7 @@ pub fn verifycred(
 
     let target = multi_pairing(&[(&check, &pk.0), (&pk.0, &check)]);
 
-    let equ_1 = setup_ppe(target);
+    let equ_1 = setup_ppe(&target);
     if equ_1.verify(&pi.gs_pi_1, &pp.crs) {
         Ok(())
     } else {

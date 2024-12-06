@@ -746,7 +746,7 @@ mod test {
                 .proof_index_commit(&msg, &opening, &cm, &value_0, idx, &value_i, &o, &pp);
             assert!(commitment
                 .verify_proof_index_commit(&cm, idx, &proof, &pp)
-                .is_ok())
+                .is_ok());
         }
     }
 

@@ -321,7 +321,7 @@ mod test {
         assert!(other_pk.is_valid());
         assert_eq!(other_pk, pk);
 
-        let sig = Signature::from_shares(&sigs[1..t + 1], &lagrange);
+        let sig = Signature::from_shares(&sigs[1..=t], &lagrange);
         assert!(pk.verify_pedersen_commitment(&cm, 0, &sig, &pp).is_ok());
 
         let lagrange = Lagrange::new(
@@ -360,7 +360,7 @@ mod test {
         let pk_1 = sk_1.to_public_key();
         let pk_2 = sk_2.to_public_key();
 
-        assert_eq!(pk_1.clone() + &pk_2, [pk_1, pk_2].iter().sum())
+        assert_eq!(pk_1.clone() + &pk_2, [pk_1, pk_2].iter().sum());
     }
 
     #[test]
