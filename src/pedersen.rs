@@ -117,8 +117,7 @@ where
     D: Digest,
 {
     let mut storage = Vec::new();
-    g12.0.serialize_uncompressed(&mut storage).unwrap();
-    g12.1.serialize_uncompressed(&mut storage).unwrap();
+    g12.serialize_uncompressed(&mut storage).unwrap();
     hasher.update(storage);
 }
 
@@ -147,27 +146,23 @@ where
 {
     let mut storage = Vec::new();
     proof.xcoms.coms.iter().for_each(|com| {
-        com.0.serialize_uncompressed(&mut storage).unwrap();
-        com.1.serialize_uncompressed(&mut storage).unwrap();
+        com.serialize_uncompressed(&mut storage).unwrap();
         hasher.update(&storage);
         storage.clear();
     });
     proof.ycoms.coms.iter().for_each(|com| {
-        com.0.serialize_uncompressed(&mut storage).unwrap();
-        com.1.serialize_uncompressed(&mut storage).unwrap();
+        com.serialize_uncompressed(&mut storage).unwrap();
         hasher.update(&storage);
         storage.clear();
     });
     proof.equ_proofs.iter().for_each(|prf| {
         prf.pi.iter().for_each(|com| {
-            com.0.serialize_uncompressed(&mut storage).unwrap();
-            com.1.serialize_uncompressed(&mut storage).unwrap();
+            com.serialize_uncompressed(&mut storage).unwrap();
             hasher.update(&storage);
             storage.clear();
         });
         prf.theta.iter().for_each(|com| {
-            com.0.serialize_uncompressed(&mut storage).unwrap();
-            com.1.serialize_uncompressed(&mut storage).unwrap();
+            com.serialize_uncompressed(&mut storage).unwrap();
             hasher.update(&storage);
             storage.clear();
         });

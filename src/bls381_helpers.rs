@@ -7,6 +7,7 @@ use std::{
 use ark_bls12_381::Bls12_381;
 use ark_ec::pairing::{Pairing, PairingOutput};
 use ark_ff::{UniformRand, Zero};
+use ark_serialize::CanonicalSerialize;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use sha2::Digest;
@@ -66,7 +67,7 @@ pub fn multi_pairing(elements: &[(&G1G2, &G1G2)]) -> Gt {
     )
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, CanonicalSerialize)]
 pub struct G1G2(pub G1Projective, pub G2Projective);
 
 impl G1G2 {

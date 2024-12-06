@@ -221,8 +221,7 @@ pub struct Token {
 impl Token {
     pub fn hash_prime(&self, pp: &PublicParameters) -> Vec<usize> {
         let mut buffer = Vec::new();
-        self.s.0 .0.serialize_uncompressed(&mut buffer).unwrap();
-        self.s.0 .1.serialize_uncompressed(&mut buffer).unwrap();
+        self.s.0.serialize_uncompressed(&mut buffer).unwrap();
         let mut hasher = sha3::Shake256::default();
         hasher.update(&buffer);
         let mut reader = hasher.finalize_xof();
