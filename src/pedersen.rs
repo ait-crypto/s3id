@@ -212,13 +212,13 @@ fn hash_pedersen_proof(commitment: &Commitment, t: &G1G2) -> Scalar {
 }
 
 impl Commitment {
-    pub fn commit(message: &Scalar) -> (Commitment, Opening) {
+    pub fn commit(message: &Scalar) -> (Self, Opening) {
         Self::commit_with_randomness(message, &Scalar::rand(&mut rand::thread_rng()))
     }
 
-    pub fn commit_with_randomness(message: &Scalar, r: &Scalar) -> (Commitment, Opening) {
+    pub fn commit_with_randomness(message: &Scalar, r: &Scalar) -> (Self, Opening) {
         let pp = get_parameters();
-        (Commitment(&pp.g * *r + &pp.u * *message), Opening { r: *r })
+        (Self(&pp.g * *r + &pp.u * *message), Opening { r: *r })
     }
 
     pub fn verify(&self, message: &Scalar, opening: &Opening) -> Result<(), Error> {
@@ -263,7 +263,7 @@ impl Commitment {
         &self,
         message: &Scalar,
         opening: &Opening,
-        commitment_2: &Commitment,
+        commitment_2: &Self,
         message_2: &Scalar,
         opening_2: &Opening,
         base: &G1G2,
@@ -314,7 +314,7 @@ impl Commitment {
 
     pub fn verify_proof_2_pk(
         &self,
-        commitment_2: &Commitment,
+        commitment_2: &Self,
         base: &G1G2,
         pk: &G1G2,
         proof: &Proof2PK,
@@ -344,13 +344,13 @@ impl Commitment {
         idx: usize,
         value_i: &Scalar,
         multi_pp: &MultiBasePublicParameters,
-    ) -> (Commitment, Opening) {
+    ) -> (Self, Opening) {
         debug_assert!(idx < multi_pp.us.len());
 
         let r = Scalar::rand(&mut rand::thread_rng());
         let pp = get_parameters();
         (
-            Commitment(&pp.g * r + &pp.u * *value_0 + &multi_pp[idx] * *value_i),
+            Self(&pp.g * r + &pp.u * *value_0 + &multi_pp[idx] * *value_i),
             Opening { r },
         )
     }
@@ -378,7 +378,7 @@ impl Commitment {
         &self,
         message: &Scalar,
         opening: &Opening,
-        commitment_2: &Commitment,
+        commitment_2: &Self,
         value_0: &Scalar,
         idx: usize,
         value_i: &Scalar,
@@ -428,7 +428,7 @@ impl Commitment {
 
     pub fn verify_proof_index_commit(
         &self,
-        commitment_2: &Commitment,
+        commitment_2: &Self,
         idx: usize,
         proof: &ProofMultiBase,
         multi_pp: &MultiBasePublicParameters,
@@ -457,7 +457,7 @@ impl Commitment {
         value_0: &Scalar,
         iter: I,
         multi_pp: &MultiBasePublicParameters,
-    ) -> (Commitment, Opening)
+    ) -> (Self, Opening)
     where
         I: Iterator<Item = (usize, Scalar)> + ExactSizeIterator,
     {
@@ -472,7 +472,7 @@ impl Commitment {
             },
         );
 
-        (Commitment(cm), Opening { r })
+        (Self(cm), Opening { r })
     }
 
     pub fn verify_multi_index_commit<I>(
@@ -612,12 +612,12 @@ impl Sub for &Commitment {
     }
 }
 
-impl Sub<&Commitment> for Commitment {
-    type Output = Commitment;
+impl Sub<&Self> for Commitment {
+    type Output = Self;
 
     #[inline]
-    fn sub(self, rhs: &Commitment) -> Self::Output {
-        Commitment(&self.0 - &rhs.0)
+    fn sub(self, rhs: &Self) -> Self::Output {
+        Self(&self.0 - &rhs.0)
     }
 }
 
@@ -630,34 +630,34 @@ impl Add for &Commitment {
     }
 }
 
-impl Add<&Commitment> for Commitment {
-    type Output = Commitment;
+impl Add<&Self> for Commitment {
+    type Output = Self;
 
-    fn add(self, rhs: &Commitment) -> Self::Output {
-        Commitment(self.0 + &rhs.0)
+    fn add(self, rhs: &Self) -> Self::Output {
+        Self(self.0 + &rhs.0)
     }
 }
 
 impl Sum for Commitment {
     #[inline]
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        Commitment(iter.map(|cm| cm.0).sum())
+        Self(iter.map(|cm| cm.0).sum())
     }
 }
 
-impl<'a> Sum<&'a Commitment> for Commitment {
+impl<'a> Sum<&'a Self> for Commitment {
     #[inline]
-    fn sum<I: Iterator<Item = &'a Commitment>>(iter: I) -> Self {
-        Commitment(iter.map(|cm| &cm.0).sum())
+    fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+        Self(iter.map(|cm| &cm.0).sum())
     }
 }
 
 impl Mul<Scalar> for Commitment {
-    type Output = Commitment;
+    type Output = Self;
 
     #[inline]
     fn mul(self, rhs: Scalar) -> Self::Output {
-        Commitment(self.0 * rhs)
+        Self(self.0 * rhs)
     }
 }
 

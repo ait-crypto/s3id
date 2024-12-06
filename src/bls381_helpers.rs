@@ -77,13 +77,13 @@ impl G1G2 {
 
 impl<G> Add<G> for G1G2
 where
-    G: Borrow<G1G2>,
+    G: Borrow<Self>,
 {
-    type Output = G1G2;
+    type Output = Self;
 
     fn add(self, rhs: G) -> Self::Output {
         let rhs = rhs.borrow();
-        G1G2(self.0 + rhs.0, self.1 + rhs.1)
+        Self(self.0 + rhs.0, self.1 + rhs.1)
     }
 }
 
@@ -100,7 +100,7 @@ where
 }
 
 impl Neg for G1G2 {
-    type Output = G1G2;
+    type Output = Self;
 
     fn neg(self) -> Self::Output {
         Self(-self.0, -self.1)
@@ -117,13 +117,13 @@ impl Neg for &G1G2 {
 
 impl<G> Sub<G> for G1G2
 where
-    G: Borrow<G1G2>,
+    G: Borrow<Self>,
 {
-    type Output = G1G2;
+    type Output = Self;
 
     fn sub(self, rhs: G) -> Self::Output {
         let rhs = rhs.borrow();
-        G1G2(self.0 - rhs.0, self.1 - rhs.1)
+        Self(self.0 - rhs.0, self.1 - rhs.1)
     }
 }
 
@@ -141,7 +141,7 @@ where
 
 impl<G> Sum<G> for G1G2
 where
-    G: Borrow<G1G2>,
+    G: Borrow<Self>,
 {
     fn sum<I: Iterator<Item = G>>(iter: I) -> Self {
         let (g_1, g_2) = iter.fold(
@@ -151,12 +151,12 @@ where
                 (acc_1 + g1g2.0, acc_2 + g1g2.1)
             },
         );
-        G1G2(g_1, g_2)
+        Self(g_1, g_2)
     }
 }
 
 impl Mul<Scalar> for G1G2 {
-    type Output = G1G2;
+    type Output = Self;
 
     fn mul(mut self, rhs: Scalar) -> Self::Output {
         self.0 *= rhs;

@@ -64,7 +64,7 @@ impl SecretKey {
         }
     }
 
-    pub fn into_shares(&self, num_shares: usize, t: usize) -> Vec<SecretKey> {
+    pub fn into_shares(&self, num_shares: usize, t: usize) -> Vec<Self> {
         let mut rng = thread_rng();
         let mut sks: Vec<_> = (0..t - 1).map(|_| Scalar::rand(&mut rng)).collect();
 
@@ -83,7 +83,7 @@ impl SecretKey {
 
             sks.push(base * lagrange.eval_j_0(t - 1).inverse().unwrap());
         }
-        sks.into_iter().map(|sk| SecretKey { sk }).collect()
+        sks.into_iter().map(|sk| Self { sk }).collect()
     }
 
     pub fn to_public_key(&self) -> PublicKey {
@@ -105,7 +105,7 @@ impl SecretKey {
 pub struct PublicKey(pub(crate) G1G2);
 
 impl PublicKey {
-    pub fn from_secret_key_shares<'a, I>(shares: I, lagrange: &Lagrange) -> PublicKey
+    pub fn from_secret_key_shares<'a, I>(shares: I, lagrange: &Lagrange) -> Self
     where
         I: Iterator<Item = &'a SecretKey>,
     {
@@ -143,7 +143,7 @@ impl PublicKey {
 pub struct Signature(pub(crate) G1G2);
 
 impl Signature {
-    pub fn from_shares(signatures: &[Signature], lagrange: &Lagrange) -> Signature {
+    pub fn from_shares(signatures: &[Self], lagrange: &Lagrange) -> Self {
         signatures
             .iter()
             .enumerate()
@@ -169,20 +169,20 @@ impl Mul<Scalar> for &PublicKey {
 }
 
 impl Mul<Scalar> for PublicKey {
-    type Output = PublicKey;
+    type Output = Self;
 
     #[inline]
     fn mul(self, rhs: Scalar) -> Self::Output {
-        PublicKey(self.0 * rhs)
+        Self(self.0 * rhs)
     }
 }
 
-impl Add<&PublicKey> for PublicKey {
-    type Output = PublicKey;
+impl Add<&Self> for PublicKey {
+    type Output = Self;
 
     #[inline]
-    fn add(self, rhs: &PublicKey) -> Self::Output {
-        PublicKey(self.0 + &rhs.0)
+    fn add(self, rhs: &Self) -> Self::Output {
+        Self(self.0 + &rhs.0)
     }
 }
 
@@ -204,27 +204,27 @@ impl Sub<&PublicKey> for &PublicKey {
     }
 }
 
-impl<'a> Sum<&'a PublicKey> for PublicKey {
+impl<'a> Sum<&'a Self> for PublicKey {
     #[inline]
-    fn sum<I: Iterator<Item = &'a PublicKey>>(iter: I) -> Self {
-        PublicKey(iter.map(|v| &v.0).sum())
+    fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+        Self(iter.map(|v| &v.0).sum())
     }
 }
 
-impl Sum<PublicKey> for PublicKey {
+impl Sum<Self> for PublicKey {
     #[inline]
-    fn sum<I: Iterator<Item = PublicKey>>(iter: I) -> Self {
-        PublicKey(iter.map(|v| v.0).sum())
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        Self(iter.map(|v| v.0).sum())
     }
 }
 
 // this is abuse of notation
 impl Sub<&PublicKey> for Signature {
-    type Output = Signature;
+    type Output = Self;
 
     #[inline]
     fn sub(self, rhs: &PublicKey) -> Self::Output {
-        Signature(self.0 - &rhs.0)
+        Self(self.0 - &rhs.0)
     }
 }
 
@@ -238,20 +238,20 @@ impl Add<&PublicKey> for &Signature {
 }
 
 impl Add<PublicKey> for Signature {
-    type Output = Signature;
+    type Output = Self;
 
     #[inline]
     fn add(self, rhs: PublicKey) -> Self::Output {
-        Signature(self.0 + rhs.0)
+        Self(self.0 + rhs.0)
     }
 }
 
 impl Mul<Scalar> for Signature {
-    type Output = Signature;
+    type Output = Self;
 
     #[inline]
     fn mul(self, rhs: Scalar) -> Self::Output {
-        Signature(self.0 * rhs)
+        Self(self.0 * rhs)
     }
 }
 
@@ -271,9 +271,9 @@ impl Sum for Signature {
     }
 }
 
-impl<'a> Sum<&'a Signature> for Signature {
+impl<'a> Sum<&'a Self> for Signature {
     #[inline]
-    fn sum<I: Iterator<Item = &'a Signature>>(iter: I) -> Self {
+    fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
         Self(iter.map(|v| &v.0).sum())
     }
 }
