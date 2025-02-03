@@ -16,7 +16,7 @@ ark-bls12-381 = { version = "0.5" }
 ark-ec = { version = "0.5", default-features = false }
 ark-ff = { version = "0.5", default-features = false }
 ark-serialize = { version = "0.5", default-features = false }
-rand_chacha = { version = "0.3" }
+rand_chacha = { version = "0.9" }
 
 [dev-dependencies]
 criterion = "0.5"
