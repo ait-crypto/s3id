@@ -6,7 +6,7 @@ license = "Apache-2.0 OR MIT"
 edition = "2024"
 
 [dependencies]
-rand = "0.8"
+rand = "0.9"
 rayon = "1"
 sha2 = { version = "0.10", default-features = false, features = ["std"] }
 sha3 = { version = "0.10", default-features = false, features = ["std", "asm"] }
