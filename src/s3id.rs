@@ -1,5 +1,5 @@
 use ark_ff::{UniformRand, Zero};
-use groth_sahai::{prover::Provable, verifier::Verifiable, AbstractCrs};
+use groth_sahai::{AbstractCrs, prover::Provable, verifier::Verifiable};
 use rand::thread_rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
@@ -7,11 +7,12 @@ use thiserror::Error;
 use crate::{
     atact::{self, AtACTError, Token},
     bls381_helpers::{
+        G1G2, Gt, Scalar,
         gs::{CProof, CRS, PPE},
-        hash_with_domain_separation, multi_pairing, Gt, Scalar, G1G2,
+        hash_with_domain_separation, multi_pairing,
     },
     pedersen::{
-        self, get_parameters, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex,
+        self, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex, get_parameters,
     },
     tsw::Signature,
 };
@@ -192,11 +193,12 @@ pub fn microcred(
                 Signature::from_shares(&signatures[..pp.atact_pp.t], &pp.atact_pp.lagrange_t);
             // sanity check
             // NOTE: signed with basis u_i, hence idx + 1
-            debug_assert!(pp
-                .atact_pp
-                .pk
-                .verify_pedersen_commitment(&cm_i, idx + 1, &sigma_i, &pp.atact_pp.tsw_pp)
-                .is_ok());
+            debug_assert!(
+                pp.atact_pp
+                    .pk
+                    .verify_pedersen_commitment(&cm_i, idx + 1, &sigma_i, &pp.atact_pp.tsw_pp)
+                    .is_ok()
+            );
             // 10.i
             Ok(&sigma_i + &(&pp.atact_pp.pk * -op_i.r))
         })
@@ -261,8 +263,8 @@ pub fn appcred(
 
     let pp2 = get_parameters();
 
-    let g1_1_vars = vec![zeta.0 .0.into()];
-    let g2_2_vars = vec![zeta.0 .1.into()];
+    let g1_1_vars = vec![zeta.0.0.into()];
+    let g2_2_vars = vec![zeta.0.1.into()];
 
     let target = multi_pairing(&[(&zeta.0, &pp2.g), (&pp2.g, &zeta.0)]);
 

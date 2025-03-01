@@ -7,7 +7,7 @@ use sha3::digest::{ExtendableOutput, Update, XofReader};
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{multi_pairing, Scalar},
+    bls381_helpers::{Scalar, multi_pairing},
     lagrange::Lagrange,
     pedersen::{Commitment, Proof2PK},
     tsw::{self, PublicKey, SecretKey, Signature},

@@ -1,7 +1,7 @@
 use ark_ff::UniformRand;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rand::{distributions::Uniform, Rng};
-use s3id::{s3id::*, Scalar};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use rand::{Rng, distributions::Uniform};
+use s3id::{Scalar, s3id::*};
 
 fn bench_s3id(
     c: &mut Criterion,

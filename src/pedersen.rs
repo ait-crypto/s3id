@@ -8,10 +8,10 @@ use ark_ff::{Field, UniformRand};
 use ark_serialize::CanonicalSerialize;
 use rand::{RngCore, SeedableRng};
 // use sha3::{Digest, Sha3_512 as Hasher};
-use sha2::{digest::consts::U32, Digest, Sha256 as Hasher};
+use sha2::{Digest, Sha256 as Hasher, digest::consts::U32};
 use thiserror::Error;
 
-use crate::bls381_helpers::{gs::CProof, hash_with_domain_separation, Scalar, G1G2};
+use crate::bls381_helpers::{G1G2, Scalar, gs::CProof, hash_with_domain_separation};
 
 pub struct PublicParameters {
     pub g: G1G2,
@@ -708,9 +708,10 @@ mod test {
         for idx in 0..l {
             let value_i = Scalar::rand(&mut rng);
             let (cm, o) = Commitment::index_commit(&value_0, idx, &value_i, &pp);
-            assert!(cm
-                .verify_index_commit(&value_0, idx, &value_i, &o, &pp)
-                .is_ok());
+            assert!(
+                cm.verify_index_commit(&value_0, idx, &value_i, &o, &pp)
+                    .is_ok()
+            );
         }
     }
 
@@ -727,15 +728,18 @@ mod test {
         for idx in 0..l {
             let value_i = Scalar::rand(&mut rng);
             let (cm, o) = Commitment::index_commit(&value_0, idx, &value_i, &pp);
-            assert!(cm
-                .verify_index_commit(&value_0, idx, &value_i, &o, &pp)
-                .is_ok());
+            assert!(
+                cm.verify_index_commit(&value_0, idx, &value_i, &o, &pp)
+                    .is_ok()
+            );
 
             let proof = commitment
                 .proof_index_commit(&msg, &opening, &cm, &value_0, idx, &value_i, &o, &pp);
-            assert!(commitment
-                .verify_proof_index_commit(&cm, idx, &proof, &pp)
-                .is_ok());
+            assert!(
+                commitment
+                    .verify_proof_index_commit(&cm, idx, &proof, &pp)
+                    .is_ok()
+            );
         }
     }
 
@@ -751,9 +755,10 @@ mod test {
             (7usize, Scalar::rand(&mut rng)),
         ];
         let (cm, o) = Commitment::multi_index_commit(&value_0, values.iter().copied(), &pp);
-        assert!(cm
-            .verify_multi_index_commit(&value_0, values.iter().copied(), &o, &pp)
-            .is_ok());
+        assert!(
+            cm.verify_multi_index_commit(&value_0, values.iter().copied(), &o, &pp)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -768,9 +773,10 @@ mod test {
             (7usize, Scalar::rand(&mut rng)),
         ];
         let (cm, o) = Commitment::multi_index_commit(&value_0, values.iter().copied(), &pp);
-        assert!(cm
-            .verify_multi_index_commit(&value_0, values.iter().copied(), &o, &pp)
-            .is_ok());
+        assert!(
+            cm.verify_multi_index_commit(&value_0, values.iter().copied(), &o, &pp)
+                .is_ok()
+        );
 
         let prf_base = hash_with_domain_separation(b"msg", b"prf");
         let prf = prf_base.clone() * value_0;
@@ -784,8 +790,9 @@ mod test {
             None,
             &pp,
         );
-        assert!(cm
-            .verify_proof_multi_index_commit(&prf_base, &prf, None, &proof, &pp)
-            .is_ok());
+        assert!(
+            cm.verify_proof_multi_index_commit(&prf_base, &prf, None, &proof, &pp)
+                .is_ok()
+        );
     }
 }

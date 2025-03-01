@@ -9,9 +9,9 @@ use rand::thread_rng;
 use thiserror::Error;
 
 use crate::{
-    bls381_helpers::{hash_usize, multi_pairing, Scalar, G1G2},
+    bls381_helpers::{G1G2, Scalar, hash_usize, multi_pairing},
     lagrange::Lagrange,
-    pedersen::{get_parameters, Commitment},
+    pedersen::{Commitment, get_parameters},
 };
 
 #[derive(Error, Debug)]
