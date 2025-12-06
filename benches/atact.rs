@@ -1,5 +1,7 @@
+use std::hint::black_box;
+
 use ark_ff::UniformRand;
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use s3id::{Scalar, atact::*};
 
 fn bench_atact(c: &mut Criterion, num_issuers: usize, n: usize, t: usize, tprime: usize) {

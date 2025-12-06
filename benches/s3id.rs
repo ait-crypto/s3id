@@ -1,5 +1,7 @@
+use std::hint::black_box;
+
 use ark_ff::UniformRand;
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use rand::{Rng, distributions::Uniform};
 use s3id::{Scalar, s3id::*};
 
@@ -103,7 +105,7 @@ fn bench_s3id_attibute_sizes(
     let distribution = Uniform::new(0, big_l - 1);
     while indices.len() < small_l {
         let sample = rng.sample(distribution);
-        if !indices.iter().any(|v| *v == sample) {
+        if !indices.contains(&sample) {
             indices.push(sample);
         }
     }
