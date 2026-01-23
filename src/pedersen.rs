@@ -7,6 +7,7 @@ use std::{
 use ark_ff::{Field, UniformRand};
 use ark_serialize::CanonicalSerialize;
 use rand::{RngCore, SeedableRng};
+use serde::Serialize;
 // use sha3::{Digest, Sha3_512 as Hasher};
 use sha2::{Digest, Sha256 as Hasher, digest::consts::U32};
 use thiserror::Error;
@@ -65,7 +66,7 @@ impl Index<usize> for MultiBasePublicParameters {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct Commitment(pub(crate) G1G2);
 
 pub struct Opening {
@@ -96,12 +97,22 @@ pub struct ProofMultiBase {
     pi_2: ProofIndexCommit,
 }
 
+#[derive(Serialize, Clone, Copy)]
+pub struct IndexedScalar(
+    #[serde(skip)] pub usize,
+    #[serde(with = "ark_serde_compat")] pub Scalar,
+);
+
+#[derive(Serialize)]
 pub struct ProofMultiIndex {
     t: G1G2,
+    #[serde(with = "ark_serde_compat")]
     s_1: Scalar,
+    #[serde(with = "ark_serde_compat")]
     s_2: Scalar,
-    pub(crate) s_i: Vec<(usize, Scalar)>,
+    pub(crate) s_i: Vec<IndexedScalar>,
     t_prf: G1G2,
+    #[serde(with = "ark_serde_compat")]
     s_prf: Scalar,
 }
 
@@ -546,7 +557,7 @@ impl Commitment {
             s_2,
             s_i: randoms_and_values
                 .into_iter()
-                .map(|(idx, r_i, value_i)| (idx, r_i + value_i * c))
+                .map(|(idx, r_i, value_i)| IndexedScalar(idx, r_i + value_i * c))
                 .collect(),
             t_prf,
             s_prf,
@@ -568,7 +579,7 @@ impl Commitment {
 
         let check_1 = proof.s_i.iter().fold(
             &pp.g * proof.s_1 + &pp.u * (proof.s_2 * len),
-            |c, (idx, s_i)| {
+            |c, IndexedScalar(idx, s_i)| {
                 hash_g1g2(&mut hasher, &multi_pp[*idx]);
                 c + &multi_pp[*idx] * *s_i
             },

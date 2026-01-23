@@ -399,7 +399,7 @@ pub enum AtACTError {
     #[error("Invalid ZK proof.")]
     InvalidZKProof,
     #[error("Invalid token proof: {0:?}")]
-    InvalidProof(Vec<AtACTError>),
+    InvalidProof(Vec<Self>),
     #[error("Unknown error")]
     UnknownError,
 }

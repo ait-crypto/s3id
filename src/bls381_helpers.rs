@@ -10,6 +10,7 @@ use ark_ff::{UniformRand, Zero};
 use ark_serialize::CanonicalSerialize;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use serde::Serialize;
 use sha2::Digest;
 
 pub type G1Affine = <Bls12_381 as Pairing>::G1Affine;
@@ -67,8 +68,11 @@ pub fn multi_pairing(elements: &[(&G1G2, &G1G2)]) -> Gt {
     )
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, CanonicalSerialize)]
-pub struct G1G2(pub G1Projective, pub G2Projective);
+#[derive(Debug, Clone, Default, PartialEq, Eq, CanonicalSerialize, Serialize)]
+pub struct G1G2(
+    #[serde(with = "ark_serde_compat")] pub G1Projective,
+    #[serde(with = "ark_serde_compat")] pub G2Projective,
+);
 
 impl G1G2 {
     pub fn random(mut rng: impl RngCore) -> Self {
@@ -258,4 +262,38 @@ pub mod gs {
     #[allow(clippy::upper_case_acronyms)]
     pub type PPE = groth_sahai::statement::PPE<Bls12_381>;
     pub type CProof = groth_sahai::prover::CProof<Bls12_381>;
+
+    pub mod serialize_cproof {
+        use ark_serialize::CanonicalSerialize;
+        use serde::{Serializer, ser::Error};
+
+        use super::*;
+
+        pub fn serialize<S>(value: &CProof, ser: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let mut dst = Vec::new();
+            for v in value.xcoms.coms.iter() {
+                let mut tmp = Vec::new();
+                v.serialize_compressed(&mut tmp)
+                    .map_err(|_| S::Error::custom("serialize_compressed failed"))?;
+                dst.append(&mut tmp);
+            }
+            for v in value.ycoms.coms.iter() {
+                let mut tmp = Vec::new();
+                v.serialize_compressed(&mut tmp)
+                    .map_err(|_| S::Error::custom("serialize_compressed failed"))?;
+                dst.append(&mut tmp);
+            }
+            for v in value.equ_proofs.iter() {
+                let mut tmp = Vec::new();
+                v.serialize_compressed(&mut tmp)
+                    .map_err(|_| S::Error::custom("serialize_compressed failed"))?;
+                dst.append(&mut tmp);
+            }
+
+            ser.serialize_bytes(&dst)
+        }
+    }
 }

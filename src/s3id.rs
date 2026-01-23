@@ -2,17 +2,19 @@ use ark_ff::{UniformRand, Zero};
 use groth_sahai::{AbstractCrs, prover::Provable, verifier::Verifiable};
 use rand::thread_rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
     atact::{self, AtACTError, Token},
     bls381_helpers::{
         G1G2, Gt, Scalar,
-        gs::{CProof, CRS, PPE},
+        gs::{CProof, CRS, PPE, serialize_cproof},
         hash_with_domain_separation, multi_pairing,
     },
     pedersen::{
-        self, Commitment, MultiBasePublicParameters, Opening, ProofMultiIndex, get_parameters,
+        self, Commitment, IndexedScalar, MultiBasePublicParameters, Opening, ProofMultiIndex,
+        get_parameters,
     },
     tsw::Signature,
 };
@@ -205,13 +207,16 @@ pub fn microcred(
         .collect::<Result<Vec<_>, _>>()
 }
 
+#[derive(Serialize)]
 pub struct Credential {
     tau: Commitment,
     prf: G1G2,
 }
 
+#[derive(Serialize)]
 pub struct Proof {
     pi: ProofMultiIndex,
+    #[serde(with = "serialize_cproof")]
     gs_pi_1: CProof,
 }
 
@@ -305,7 +310,7 @@ pub fn verifycred(
         .pi
         .s_i
         .iter()
-        .map(|(idx, _)| {
+        .map(|IndexedScalar(idx, _)| {
             // NOTE: signed with basis u_i, hence idx + 1
             &pp.atact_pp.tsw_pp[*idx + 1]
         })
