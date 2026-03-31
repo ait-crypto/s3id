@@ -9,7 +9,7 @@ rust-version = "1.90"
 [dependencies]
 rand = "0.8"
 rayon = "1"
-sha2 = { version = "0.10", default-features = false, features = ["std"] }
+sha2 = "0.11"
 sha3 = { version = "0.10", default-features = false, features = ["std", "asm"] }
 thiserror = "2"
 groth-sahai = { git = "https://github.com/jdwhite48/groth-sahai-rs", rev = "cc0c3f023efb68c07e5a9d2da9fc9ca588f05698" }
