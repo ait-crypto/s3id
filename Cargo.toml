@@ -15,7 +15,7 @@ thiserror = "2"
 groth-sahai = { git = "https://github.com/jdwhite48/groth-sahai-rs", rev = "cc0c3f023efb68c07e5a9d2da9fc9ca588f05698" }
 ark-bls12-381 = { version = "0.5" }
 ark-ec = { version = "0.5", default-features = false }
-ark-ff = { version = "0.5", default-features = false }
+ark-ff = { version = "0.6", default-features = false }
 ark-serialize = { version = "0.5", default-features = false }
 rand_chacha = { version = "0.3" }
 serde = { version = "1", features = ["derive"] }
